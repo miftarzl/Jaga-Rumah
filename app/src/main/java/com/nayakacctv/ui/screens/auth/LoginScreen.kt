@@ -26,10 +26,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.nayakacctv.data.repository.NayakaRepository
+import com.nayakacctv.ui.components.GoogleSignInButton
 import com.nayakacctv.ui.components.NayakaButton
 import com.nayakacctv.ui.components.NayakaTextField
+import com.nayakacctv.ui.components.OrDivider
 import com.nayakacctv.ui.theme.*
 import com.nayakacctv.ui.utils.BiometricHelper
+import com.nayakacctv.ui.utils.GoogleAuthHelper
 import kotlinx.coroutines.launch
 
 @Composable
@@ -46,7 +49,16 @@ fun LoginScreen(
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var isGoogleLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val webClientId = remember {
+        try {
+            context.getString(com.nayakacctv.R.string.google_web_client_id)
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     val canUseBiometric = remember {
         repository.isBiometricEnabled() && BiometricHelper.isBiometricAvailable(context)
@@ -175,6 +187,34 @@ fun LoginScreen(
                         onLoginSuccess()
                     }.onFailure {
                         errorMessage = it.message ?: "Gagal masuk."
+                    }
+                }
+            }
+        )
+
+        // Divider
+        OrDivider()
+
+        // Google Sign-In Button
+        GoogleSignInButton(
+            text = "Masuk dengan Google",
+            isLoading = isGoogleLoading,
+            onClick = {
+                isGoogleLoading = true
+                errorMessage = null
+                coroutineScope.launch {
+                    val tokenRes = GoogleAuthHelper.getGoogleIdToken(context, webClientId)
+                    tokenRes.onSuccess { idToken ->
+                        val loginRes = repository.loginGoogle(idToken)
+                        isGoogleLoading = false
+                        loginRes.onSuccess {
+                            onLoginSuccess()
+                        }.onFailure {
+                            errorMessage = it.message ?: "Gagal masuk dengan Google."
+                        }
+                    }.onFailure {
+                        isGoogleLoading = false
+                        errorMessage = it.message ?: "Gagal otentikasi Google."
                     }
                 }
             }

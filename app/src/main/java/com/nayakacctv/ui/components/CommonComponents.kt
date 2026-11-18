@@ -392,3 +392,69 @@ fun AlertItemCard(
         }
     }
 }
+
+@Composable
+fun OrDivider(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        HorizontalDivider(modifier = Modifier.weight(1f), color = BorderSubtle)
+        Text(
+            text = "ATAU",
+            modifier = Modifier.padding(horizontal = 14.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = TextMuted
+        )
+        HorizontalDivider(modifier = Modifier.weight(1f), color = BorderSubtle)
+    }
+}
+
+@Composable
+fun GoogleSignInButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    text: String = "Lanjutkan dengan Google",
+    isLoading: Boolean = false,
+    enabled: Boolean = true
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(50.dp),
+        enabled = enabled && !isLoading,
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = SurfaceWhite,
+            contentColor = TextPrimary
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = PrimaryBlue,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.nayakacctv.R.drawable.ic_google_logo),
+                    contentDescription = "Google Logo",
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
+            }
+        }
+    }
+}

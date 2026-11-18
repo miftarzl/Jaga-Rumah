@@ -21,7 +21,9 @@ data class RegisterRequest(
 
 data class GoogleLoginRequest(
     @SerializedName("id_token") val idToken: String,
-    @SerializedName("installation_id") val installationId: String
+    @SerializedName("installation_id") val installationId: String,
+    @SerializedName("platform") val platform: String = "android",
+    @SerializedName("app_version") val appVersion: String = "1.0.0"
 )
 
 data class RefreshTokenRequest(

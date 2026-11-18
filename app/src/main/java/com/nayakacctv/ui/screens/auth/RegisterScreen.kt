@@ -16,15 +16,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nayakacctv.data.repository.NayakaRepository
+import com.nayakacctv.ui.components.GoogleSignInButton
 import com.nayakacctv.ui.components.NayakaButton
 import com.nayakacctv.ui.components.NayakaTextField
+import com.nayakacctv.ui.components.OrDivider
 import com.nayakacctv.ui.theme.*
+import com.nayakacctv.ui.utils.GoogleAuthHelper
 import kotlinx.coroutines.launch
 
 @Composable
@@ -33,6 +37,7 @@ fun RegisterScreen(
     onRegisterSuccess: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var fullName by remember { mutableStateOf("") }
@@ -41,7 +46,16 @@ fun RegisterScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var agreeTerms by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var isGoogleLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val webClientId = remember {
+        try {
+            context.getString(com.nayakacctv.R.string.google_web_client_id)
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -175,6 +189,34 @@ fun RegisterScreen(
                         onRegisterSuccess()
                     }.onFailure {
                         errorMessage = it.message ?: "Pendaftaran gagal."
+                    }
+                }
+            }
+        )
+
+        // Divider
+        OrDivider()
+
+        // Google Sign-In Button
+        GoogleSignInButton(
+            text = "Daftar dengan Google",
+            isLoading = isGoogleLoading,
+            onClick = {
+                isGoogleLoading = true
+                errorMessage = null
+                coroutineScope.launch {
+                    val tokenRes = GoogleAuthHelper.getGoogleIdToken(context, webClientId)
+                    tokenRes.onSuccess { idToken ->
+                        val loginRes = repository.loginGoogle(idToken)
+                        isGoogleLoading = false
+                        loginRes.onSuccess {
+                            onRegisterSuccess()
+                        }.onFailure {
+                            errorMessage = it.message ?: "Gagal mendaftar dengan Google."
+                        }
+                    }.onFailure {
+                        isGoogleLoading = false
+                        errorMessage = it.message ?: "Gagal otentikasi Google."
                     }
                 }
             }
