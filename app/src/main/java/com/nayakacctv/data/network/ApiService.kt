@@ -1,0 +1,119 @@
+package com.nayakacctv.data.network
+
+import com.nayakacctv.data.model.*
+import retrofit2.Response
+import retrofit2.http.*
+
+interface ApiService {
+
+    // ── Authentication ──────────────────────────────────────────────────
+    @POST("mobile/auth/register")
+    suspend fun register(
+        @Body request: RegisterRequest
+    ): Response<ApiResponse<AuthTokens>>
+
+    @POST("mobile/auth/login")
+    suspend fun login(
+        @Body request: LoginRequest
+    ): Response<ApiResponse<AuthTokens>>
+
+    @POST("mobile/auth/google")
+    suspend fun loginGoogle(
+        @Body request: GoogleLoginRequest
+    ): Response<ApiResponse<AuthTokens>>
+
+    @POST("mobile/auth/refresh")
+    suspend fun refreshToken(
+        @Body request: RefreshTokenRequest
+    ): Response<ApiResponse<AuthTokens>>
+
+    @POST("mobile/auth/logout")
+    suspend fun logout(): Response<ApiResponse<Map<String, Any>>>
+
+    @POST("mobile/auth/forgot-password")
+    suspend fun forgotPassword(
+        @Body request: ForgotPasswordRequest
+    ): Response<ApiResponse<Map<String, Any>>>
+
+    @POST("mobile/auth/reset-password")
+    suspend fun resetPassword(
+        @Body request: ResetPasswordRequest
+    ): Response<ApiResponse<Map<String, Any>>>
+
+    // ── Dashboard ───────────────────────────────────────────────────────
+    @GET("mobile/dashboard")
+    suspend fun getDashboard(): Response<ApiResponse<DashboardSummary>>
+
+    // ── Cameras ─────────────────────────────────────────────────────────
+    @GET("mobile/cameras")
+    suspend fun getCameras(
+        @Query("limit") limit: Int = 50,
+        @Query("cursor") cursor: String? = null,
+        @Query("status") status: String? = null
+    ): Response<ApiResponse<CameraListResponse>>
+
+    @GET("mobile/cameras/{id}")
+    suspend fun getCameraDetail(
+        @Path("id") id: String
+    ): Response<ApiResponse<CameraDetailResponse>>
+
+    @PATCH("mobile/cameras/{id}/settings")
+    suspend fun updateCameraSettings(
+        @Path("id") id: String,
+        @Body settings: UpdateCameraSettingsRequest
+    ): Response<ApiResponse<CameraSettings>>
+
+    @GET("mobile/cameras/{id}/stream")
+    suspend fun getCameraStream(
+        @Path("id") id: String
+    ): Response<ApiResponse<Map<String, String>>>
+
+    // ── Recordings ──────────────────────────────────────────────────────
+    @GET("mobile/recordings")
+    suspend fun getRecordings(
+        @Query("camera_id") cameraId: String? = null,
+        @Query("from") fromDate: String? = null,
+        @Query("to") toDate: String? = null,
+        @Query("limit") limit: Int = 50
+    ): Response<ApiResponse<RecordingListResponse>>
+
+    @GET("mobile/recordings/{id}")
+    suspend fun getRecordingDetail(
+        @Path("id") id: String
+    ): Response<ApiResponse<RecordingDetailResponse>>
+
+    // ── Alerts ──────────────────────────────────────────────────────────
+    @GET("mobile/alerts")
+    suspend fun getAlerts(
+        @Query("limit") limit: Int = 50,
+        @Query("severity") severity: String? = null
+    ): Response<ApiResponse<AlertListResponse>>
+
+    @POST("mobile/alerts/{id}/read")
+    suspend fun markAlertRead(
+        @Path("id") id: String
+    ): Response<ApiResponse<Map<String, Any>>>
+
+    @POST("mobile/alerts/read-all")
+    suspend fun markAllAlertsRead(): Response<ApiResponse<Map<String, Any>>>
+
+    // ── Emergency ───────────────────────────────────────────────────────
+    @GET("mobile/emergency-contacts")
+    suspend fun getEmergencyContacts(): Response<ApiResponse<EmergencyContactsResponse>>
+
+    @POST("mobile/emergency/trigger-sos")
+    suspend fun triggerSos(
+        @Body request: TriggerSosRequest
+    ): Response<ApiResponse<Map<String, String>>>
+
+    // ── Profile & Subscriptions (via /me) ──────────────────────────────
+    @GET("mobile/me")
+    suspend fun getMe(): Response<ApiResponse<MeResponse>>
+
+    // ── Help & Terms ────────────────────────────────────────────────────
+    @GET("mobile/help")
+    suspend fun getHelpArticles(): Response<ApiResponse<HelpArticlesResponse>>
+
+    @GET("mobile/terms")
+    suspend fun getTerms(): Response<ApiResponse<TermsResponse>>
+}

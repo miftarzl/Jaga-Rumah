@@ -1,0 +1,394 @@
+package com.nayakacctv.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.nayakacctv.data.model.AlertItem
+import com.nayakacctv.data.model.Camera
+import com.nayakacctv.ui.theme.*
+import com.nayakacctv.ui.utils.Formatters
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NayakaTopAppBar(
+    title: String,
+    canNavigateBack: Boolean = false,
+    onNavigateBack: () -> Unit = {},
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    TopAppBar(
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        navigationIcon = {
+            if (canNavigateBack) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Kembali",
+                        tint = TextPrimary
+                    )
+                }
+            }
+        },
+        actions = actions,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = SurfaceWhite,
+            titleContentColor = TextPrimary
+        )
+    )
+}
+
+@Composable
+fun StatusBadge(status: String) {
+    val (bgColor, textColor, label) = when (status.lowercase()) {
+        "online", "active", "streaming" -> Triple(Color(0xFFDCFCE7), StatusOnline, "ONLINE")
+        "recording", "merekam" -> Triple(Color(0xFFFEF9C3), StatusRecording, "MEREKAM")
+        else -> Triple(Color(0xFFF1F5F9), StatusOffline, "OFFLINE")
+    }
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(bgColor)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(textColor)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = label,
+                color = textColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun SeverityBadge(severity: String) {
+    val (bgColor, textColor, label) = when (severity.lowercase()) {
+        "critical", "kritis" -> Triple(Color(0xFFFEE2E2), StatusDanger, "KRITIS")
+        "warning", "peringatan" -> Triple(Color(0xFFFEF3C7), StatusWarning, "PERINGATAN")
+        else -> Triple(Color(0xFFE0F2FE), StatusInfo, "INFO")
+    }
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(bgColor)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun NayakaButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    isLoading: Boolean = false,
+    containerColor: Color = PrimaryBlue,
+    contentColor: Color = SurfaceWhite
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(50.dp),
+        enabled = enabled && !isLoading,
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = contentColor,
+            disabledContainerColor = containerColor.copy(alpha = 0.5f)
+        )
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = contentColor,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+fun NayakaTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String = "",
+    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    errorMessage: String? = null,
+    leadingIcon: ImageVector? = null,
+    trailingIcon: @Composable (() -> Unit)? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = TextPrimary
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = { Text(placeholder, color = TextMuted) },
+            leadingIcon = leadingIcon?.let {
+                { Icon(it, contentDescription = null, tint = TextSecondary) }
+            },
+            trailingIcon = trailingIcon,
+            visualTransformation = visualTransformation,
+            keyboardOptions = keyboardOptions,
+            isError = isError,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryBlue,
+                unfocusedBorderColor = BorderSubtle,
+                focusedContainerColor = SurfaceWhite,
+                unfocusedContainerColor = SurfaceWhite,
+                errorBorderColor = StatusDanger
+            )
+        )
+        if (isError && !errorMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = errorMessage,
+                color = StatusDanger,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+fun CameraCard(
+    camera: Camera,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column {
+            // Thumbnail preview
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .background(Color(0xFF1E293B))
+            ) {
+                if (!camera.thumbnailUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = camera.thumbnailUrl,
+                        contentDescription = camera.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .size(54.dp)
+                            .align(Alignment.Center)
+                    )
+                }
+
+                // Status Badge Overlay
+                Box(
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .align(Alignment.TopEnd)
+                ) {
+                    StatusBadge(camera.status)
+                }
+
+                // Type badge
+                Box(
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .align(Alignment.BottomStart)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = camera.resolution,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Info
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = camera.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = if (camera.location.isNotBlank()) camera.location else "Tanpa lokasi",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AlertItemCard(
+    alert: AlertItem,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (alert.read) SurfaceWhite else Color(0xFFF0FDF4)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(14.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        when (alert.severity.lowercase()) {
+                            "critical" -> Color(0xFFFEE2E2)
+                            "warning" -> Color(0xFFFEF3C7)
+                            else -> Color(0xFFE0F2FE)
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = when (alert.type.lowercase()) {
+                        "motion" -> Icons.Default.DirectionsRun
+                        "person" -> Icons.Default.Person
+                        "vehicle" -> Icons.Default.DirectionsCar
+                        "sound" -> Icons.Default.VolumeUp
+                        else -> Icons.Default.Warning
+                    },
+                    contentDescription = null,
+                    tint = when (alert.severity.lowercase()) {
+                        "critical" -> StatusDanger
+                        "warning" -> StatusWarning
+                        else -> StatusInfo
+                    },
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = alert.cameraName.ifBlank { "Kamera CCTV" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    SeverityBadge(alert.severity)
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = alert.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = Formatters.formatIsoDate(alert.time),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted
+                )
+            }
+        }
+    }
+}
