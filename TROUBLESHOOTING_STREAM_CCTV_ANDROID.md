@@ -167,6 +167,44 @@ bukan hanya halaman API.
 | HTTP `401` atau `403` | Aturan autentikasi/token pada backend atau reverse proxy. |
 | Playlist berhasil tetapi video tetap kosong | Periksa URL dan akses segmen HLS serta log sumber kamera MediaMTX. |
 
+### Diagnosis untuk `Response code: 404`
+
+Error terbaru di aplikasi adalah `Response code: 404`. Ini berbeda dari error
+koneksi sebelumnya: server HLS sekarang dapat dijangkau dan mengembalikan respons
+HTTP, tetapi resource pada path yang diminta tidak ditemukan. Aplikasi memakai
+`hls_url` dari API secara langsung; aplikasi tidak membentuk stream key atau
+mengganti path URL.
+
+Minta tim backend/infra memeriksa:
+
+1. Nilai `hls_url` pada respons `GET /api/v1/mobile/cameras/{camera_id}/stream`.
+   Ambil dan periksa URL secara internal; jangan membagikan query/token ke chat
+   atau log publik.
+2. Stream key pada path playlist, misalnya
+   `/<stream_key>/index.m3u8`, harus sama persis dengan nama path yang
+   didefinisikan di konfigurasi `paths` MediaMTX.
+3. Uji URL playlist yang sama dari VPS dan dari jaringan luar VPS:
+
+   ```bash
+   curl -i "http://127.0.0.1:8888/<stream_key>/index.m3u8"
+   ```
+
+   Untuk URL publik atau reverse proxy, jalankan `curl -i` dengan URL publik
+   yang sama. Jangan menaruh token rahasia di riwayat shell bersama.
+4. Periksa log MediaMTX saat permintaan dilakukan. Pastikan path ditemukan,
+   sumber kamera berhasil dibuka, dan reverse proxy tidak menambah atau
+   menghapus segmen path yang salah.
+5. Jika playlist memberikan `200 OK`, pastikan URL segmen `.ts` atau `.m4s`
+   yang dirujuk playlist juga berhasil diakses.
+
+Pesan singkat yang dapat diteruskan ke tim backend:
+
+> Aplikasi Android sudah mengambil `hls_url` dari
+> `GET /api/v1/mobile/cameras/{camera_id}/stream` dan mengirim permintaan HLS.
+> Server membalas HTTP 404. Mohon cocokkan path/stream key di `hls_url` dengan
+> konfigurasi `paths` MediaMTX, uji playlist dari VPS dan jaringan publik, lalu
+> periksa log MediaMTX/reverse proxy. Jangan kirim token URL di log atau chat.
+
 ## 7. Setelah perbaikan server
 
 1. Pastikan endpoint stream mengembalikan `hls_url` yang baru dan valid.

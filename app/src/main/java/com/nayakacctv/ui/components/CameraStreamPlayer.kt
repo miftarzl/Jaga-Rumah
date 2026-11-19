@@ -1,9 +1,9 @@
 package com.nayakacctv.ui.components
 
 import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -19,6 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -96,8 +99,10 @@ private fun Media3CameraStreamPlayer(
             override fun onPlayerError(error: PlaybackException) {
                 hasError = true
                 isBuffering = false
-                errorMessage = error.cause?.localizedMessage
+                val err = error.cause?.localizedMessage
                     ?: "${error.errorCodeName}: ${error.localizedMessage ?: "Gagal memuat stream"}"
+                errorMessage = err
+                Log.e("NAYAKA_STREAM", "ExoPlayer error on $streamUrl: $err", error)
                 currentOnStateChange("error")
             }
         }
@@ -130,12 +135,27 @@ private fun Media3CameraStreamPlayer(
 
         if (hasError) {
             androidx.compose.foundation.layout.Column(
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
             ) {
+                val displayError = when {
+                    errorMessage?.contains("404") == true -> "Server MediaMTX belum memancarkan stream (HTTP 404)"
+                    else -> errorMessage ?: "Gagal memuat stream"
+                }
                 Text(
-                    text = errorMessage ?: "Gagal memuat stream",
-                    color = Color.White
+                    text = displayError,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = streamUrl,
+                    color = Color.LightGray,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = { retryCount++ }) {
                     Text("Coba lagi")
                 }

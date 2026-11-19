@@ -63,12 +63,20 @@ fun LiveViewScreen(
         val cameraResult = cameraRequest.await()
         val streamResult = streamRequest.await()
         camera = cameraResult.getOrNull()
-        streamUrl = streamResult.getOrNull()?.playbackUrl
+        val fetchedStream = streamResult.getOrNull()
+        val activeStreamUrl = fetchedStream?.playbackUrl 
+            ?: camera?.streamUrl?.takeIf { it.isNotBlank() }
+
+        android.util.Log.i("NAYAKA_STREAM", "getCameraDetail: $cameraResult")
+        android.util.Log.i("NAYAKA_STREAM", "getCameraStream: $streamResult")
+        android.util.Log.i("NAYAKA_STREAM", "activeStreamUrl: $activeStreamUrl, playbackUrl: ${fetchedStream?.playbackUrl}, camStreamUrl: ${camera?.streamUrl}")
+
+        streamUrl = activeStreamUrl
 
         if (streamUrl == null) {
             streamStatus = "Koneksi Terputus"
             streamError = streamResult.exceptionOrNull()?.localizedMessage
-                ?: "Backend tidak mengirim URL HLS (hls_url) untuk kamera ini"
+                ?: "Backend tidak mengirim URL stream untuk kamera ini"
         }
     }
 
@@ -146,11 +154,11 @@ fun LiveViewScreen(
                     .height(280.dp)
                     .background(Color.Black)
             ) {
-                    val hlsUrl = streamUrl
-                    if (hlsUrl != null) {
+                    val currentStreamUrl = streamUrl
+                    if (currentStreamUrl != null) {
                         CameraStreamPlayer(
-                            streamUrl = hlsUrl,
-                            forceHls = true,
+                            streamUrl = currentStreamUrl,
+                            forceHls = false,
                             modifier = Modifier.fillMaxSize(),
                             onStateChange = { state ->
                                 streamStatus = when (state) {
