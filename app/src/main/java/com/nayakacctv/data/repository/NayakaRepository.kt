@@ -1,9 +1,11 @@
 package com.nayakacctv.data.repository
 
+import android.content.Context
 import com.google.gson.Gson
 import com.nayakacctv.data.local.TokenManager
 import com.nayakacctv.data.model.*
 import com.nayakacctv.data.network.ApiService
+import com.nayakacctv.ui.utils.BiometricHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.Response
@@ -166,9 +168,61 @@ class NayakaRepository(
             try {
                 api.logout()
             } catch (_: Exception) {}
-            tokenManager.clearSession()
+            // Keep biometric credentials if enabled so user can log back in with biometrics
+            tokenManager.clearSession(preserveBiometric = true)
         }
     }
+
+    suspend fun loginWithBiometric(): Result<Customer> {
+        val biometricRefreshToken = tokenManager.getBiometricRefreshToken()
+            ?: return Result.failure(Exception("Sesi biometrik belum tersedia. Silakan masuk dengan kata sandi."))
+
+        val req = RefreshTokenRequest(
+            refreshToken = biometricRefreshToken,
+            installationId = tokenManager.getInstallationId()
+        )
+        return safeApiCall { api.refreshToken(req) }.mapCatching { tokens ->
+            tokenManager.saveTokens(tokens.accessToken, tokens.refreshToken)
+            tokenManager.updateBiometricToken(tokens.refreshToken)
+
+            val customer = try {
+                val meRes = api.getMe()
+                meRes.body()?.data?.profile
+                    ?: tokenManager.getBiometricCustomer()
+                    ?: Customer("cust-bio", "Pengguna Nayaka", "")
+            } catch (_: Exception) {
+                tokenManager.getBiometricCustomer() ?: Customer("cust-bio", "Pengguna Nayaka", "")
+            }
+            tokenManager.saveCustomer(customer)
+            customer
+        }.recoverCatching { error ->
+            val msg = error.message ?: ""
+            if (msg.contains("401") || msg.contains("tidak berlaku") || msg.contains("expired") || msg.contains("TOKEN_REVOKED")) {
+                throw Exception("Sesi biometrik telah berakhir. Silakan masuk menggunakan kata sandi Anda.")
+            } else {
+                throw error
+            }
+        }
+    }
+
+    fun enableBiometric(): Boolean {
+        val refreshToken = tokenManager.getRefreshToken() ?: return false
+        val customer = tokenManager.getCustomer()
+        tokenManager.enableBiometric(refreshToken, customer)
+        return true
+    }
+
+    fun disableBiometric() {
+        tokenManager.disableBiometric()
+    }
+
+    fun canUseBiometric(context: Context): Boolean {
+        return tokenManager.isBiometricEnabled() &&
+                !tokenManager.getBiometricRefreshToken().isNullOrBlank() &&
+                BiometricHelper.isBiometricAvailable(context)
+    }
+
+    fun getBiometricCustomer(): Customer? = tokenManager.getBiometricCustomer()
 
     fun isLoggedIn(): Boolean = tokenManager.isLoggedIn()
     fun getCurrentCustomer(): Customer? = tokenManager.getCustomer()

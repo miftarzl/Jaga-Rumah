@@ -33,6 +33,7 @@ import com.nayakacctv.ui.components.OrDivider
 import com.nayakacctv.ui.theme.*
 import com.nayakacctv.ui.utils.BiometricHelper
 import com.nayakacctv.ui.utils.GoogleAuthHelper
+import com.nayakacctv.ui.utils.findFragmentActivity
 import kotlinx.coroutines.launch
 
 @Composable
@@ -45,11 +46,13 @@ fun LoginScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    var email by remember { mutableStateOf("") }
+    val biometricCustomer = remember { repository.getBiometricCustomer() }
+    var email by remember { mutableStateOf(biometricCustomer?.email ?: "") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var isGoogleLoading by remember { mutableStateOf(false) }
+    var isBiometricLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val webClientId = remember {
@@ -61,7 +64,7 @@ fun LoginScreen(
     }
 
     val canUseBiometric = remember {
-        repository.isBiometricEnabled() && BiometricHelper.isBiometricAvailable(context)
+        repository.canUseBiometric(context)
     }
 
     Column(
@@ -225,23 +228,60 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedButton(
                 onClick = {
-                    (context as? FragmentActivity)?.let { act ->
+                    val activity = context.findFragmentActivity()
+                    if (activity != null) {
+                        val name = biometricCustomer?.fullName ?: "Pengguna"
                         BiometricHelper.showBiometricPrompt(
-                            activity = act,
-                            onSuccess = { onLoginSuccess() },
-                            onError = { errorMessage = it }
+                            activity = activity,
+                            title = "Masuk dengan Biometrik",
+                            subtitle = "Pindai sidik jari Anda untuk melanjutkan sebagai $name",
+                            negativeButtonText = "Gunakan Kata Sandi",
+                            onSuccess = {
+                                isBiometricLoading = true
+                                errorMessage = null
+                                coroutineScope.launch {
+                                    val result = repository.loginWithBiometric()
+                                    isBiometricLoading = false
+                                    result.onSuccess {
+                                        onLoginSuccess()
+                                    }.onFailure { err ->
+                                        errorMessage = err.message ?: "Gagal masuk via biometrik."
+                                    }
+                                }
+                            },
+                            onError = { err ->
+                                errorMessage = err
+                            }
                         )
+                    } else {
+                        errorMessage = "Modul autentikasi biometrik tidak dapat diakses."
                     }
                 },
+                enabled = !isLoading && !isGoogleLoading && !isBiometricLoading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue)
             ) {
-                Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Masuk dengan Biometrik", fontWeight = FontWeight.SemiBold)
+                if (isBiometricLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = PrimaryBlue,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Memverifikasi Sidik Jari...", fontWeight = FontWeight.SemiBold)
+                } else {
+                    Icon(imageVector = Icons.Default.Fingerprint, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    val label = if (!biometricCustomer?.fullName.isNullOrBlank()) {
+                        "Masuk Cepat (${biometricCustomer?.fullName})"
+                    } else {
+                        "Masuk dengan Biometrik"
+                    }
+                    Text(label, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
 

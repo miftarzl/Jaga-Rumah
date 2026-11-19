@@ -15,12 +15,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.components.NayakaTopAppBar
 import com.nayakacctv.ui.theme.*
+import com.nayakacctv.ui.utils.BiometricHelper
+import com.nayakacctv.ui.utils.BiometricStatus
+import com.nayakacctv.ui.utils.findFragmentActivity
 import kotlinx.coroutines.launch
 
 @Composable
@@ -31,7 +35,9 @@ fun ProfileScreen(
     onNavigateToTerms: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     val customer = repository.getCurrentCustomer()
     var isBiometricEnabled by remember { mutableStateOf(repository.isBiometricEnabled()) }
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -67,6 +73,7 @@ fun ProfileScreen(
         topBar = {
             NayakaTopAppBar(title = "Profil Pengguna")
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = BackgroundSlate
     ) { padding ->
         Column(
@@ -142,16 +149,87 @@ fun ProfileScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Icon(Icons.Default.Fingerprint, contentDescription = null, tint = PrimaryBlue)
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Masuk via Biometrik", color = TextPrimary, fontWeight = FontWeight.Medium)
+                            Column {
+                                Text("Masuk via Biometrik", color = TextPrimary, fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Gunakan sidik jari untuk masuk cepat",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
                         }
                         Switch(
                             checked = isBiometricEnabled,
-                            onCheckedChange = {
-                                isBiometricEnabled = it
-                                repository.setBiometricEnabled(it)
+                            onCheckedChange = { enable ->
+                                if (enable) {
+                                    when (BiometricHelper.checkBiometricStatus(context)) {
+                                        BiometricStatus.NOT_SUPPORTED -> {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("Perangkat tidak mendukung autentikasi biometrik.")
+                                            }
+                                        }
+                                        BiometricStatus.NOT_ENROLLED -> {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("Sidik jari belum didaftarkan di Pengaturan HP Anda.")
+                                            }
+                                        }
+                                        BiometricStatus.UNAVAILABLE -> {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("Sensor biometrik saat ini tidak tersedia.")
+                                            }
+                                        }
+                                        BiometricStatus.AVAILABLE -> {
+                                            val activity = context.findFragmentActivity()
+                                            if (activity != null) {
+                                                BiometricHelper.showBiometricPrompt(
+                                                    activity = activity,
+                                                    title = "Konfirmasi Biometrik",
+                                                    subtitle = "Pindai sidik jari Anda untuk mengaktifkan fitur ini",
+                                                    negativeButtonText = "Batal",
+                                                    onSuccess = {
+                                                        val success = repository.enableBiometric()
+                                                        if (success) {
+                                                            isBiometricEnabled = true
+                                                            coroutineScope.launch {
+                                                                snackbarHostState.showSnackbar("Masuk via Biometrik berhasil diaktifkan.")
+                                                            }
+                                                        } else {
+                                                            isBiometricEnabled = false
+                                                            coroutineScope.launch {
+                                                                snackbarHostState.showSnackbar("Gagal mengaktifkan biometrik. Sesi akun tidak ditemukan.")
+                                                            }
+                                                        }
+                                                    },
+                                                    onError = { err ->
+                                                        isBiometricEnabled = false
+                                                        coroutineScope.launch {
+                                                            snackbarHostState.showSnackbar(err)
+                                                        }
+                                                    },
+                                                    onCancel = {
+                                                        isBiometricEnabled = false
+                                                    }
+                                                )
+                                            } else {
+                                                coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar("Gagal membuka modul autentikasi biometrik.")
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    repository.disableBiometric()
+                                    isBiometricEnabled = false
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Masuk via Biometrik dinonaktifkan.")
+                                    }
+                                }
                             },
                             colors = SwitchDefaults.colors(checkedThumbColor = PrimaryBlue)
                         )

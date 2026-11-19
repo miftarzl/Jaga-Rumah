@@ -35,6 +35,8 @@ class TokenManager(context: Context) {
         private const val KEY_INSTALLATION_ID = "installation_id"
         private const val KEY_USER_DATA = "user_data"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+        private const val KEY_BIOMETRIC_REFRESH_TOKEN = "biometric_refresh_token"
+        private const val KEY_BIOMETRIC_CUSTOMER_DATA = "biometric_customer_data"
     }
 
     fun getAccessToken(): String? = prefs.getString(KEY_ACCESS_TOKEN, null)
@@ -44,7 +46,14 @@ class TokenManager(context: Context) {
     fun saveTokens(accessToken: String?, refreshToken: String?) {
         prefs.edit().apply {
             if (accessToken != null) putString(KEY_ACCESS_TOKEN, accessToken) else remove(KEY_ACCESS_TOKEN)
-            if (refreshToken != null) putString(KEY_REFRESH_TOKEN, refreshToken) else remove(KEY_REFRESH_TOKEN)
+            if (refreshToken != null) {
+                putString(KEY_REFRESH_TOKEN, refreshToken)
+                if (isBiometricEnabled()) {
+                    putString(KEY_BIOMETRIC_REFRESH_TOKEN, refreshToken)
+                }
+            } else {
+                remove(KEY_REFRESH_TOKEN)
+            }
             apply()
         }
     }
@@ -59,11 +68,17 @@ class TokenManager(context: Context) {
     }
 
     fun saveCustomer(customer: Customer?) {
+        val editor = prefs.edit()
         if (customer != null) {
-            prefs.edit().putString(KEY_USER_DATA, gson.toJson(customer)).apply()
+            val json = gson.toJson(customer)
+            editor.putString(KEY_USER_DATA, json)
+            if (isBiometricEnabled()) {
+                editor.putString(KEY_BIOMETRIC_CUSTOMER_DATA, json)
+            }
         } else {
-            prefs.edit().remove(KEY_USER_DATA).apply()
+            editor.remove(KEY_USER_DATA)
         }
+        editor.apply()
     }
 
     fun getCustomer(): Customer? {
@@ -78,15 +93,59 @@ class TokenManager(context: Context) {
     fun isBiometricEnabled(): Boolean = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
 
     fun setBiometricEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, enabled).apply()
+        if (!enabled) {
+            disableBiometric()
+        } else {
+            prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, true).apply()
+        }
     }
 
-    fun clearSession() {
+    fun enableBiometric(refreshToken: String, customer: Customer?) {
+        val editor = prefs.edit()
+            .putBoolean(KEY_BIOMETRIC_ENABLED, true)
+            .putString(KEY_BIOMETRIC_REFRESH_TOKEN, refreshToken)
+        if (customer != null) {
+            editor.putString(KEY_BIOMETRIC_CUSTOMER_DATA, gson.toJson(customer))
+        }
+        editor.apply()
+    }
+
+    fun disableBiometric() {
         prefs.edit()
+            .putBoolean(KEY_BIOMETRIC_ENABLED, false)
+            .remove(KEY_BIOMETRIC_REFRESH_TOKEN)
+            .remove(KEY_BIOMETRIC_CUSTOMER_DATA)
+            .apply()
+    }
+
+    fun getBiometricRefreshToken(): String? = prefs.getString(KEY_BIOMETRIC_REFRESH_TOKEN, null)
+
+    fun updateBiometricToken(newRefreshToken: String) {
+        prefs.edit().putString(KEY_BIOMETRIC_REFRESH_TOKEN, newRefreshToken).apply()
+    }
+
+    fun getBiometricCustomer(): Customer? {
+        val json = prefs.getString(KEY_BIOMETRIC_CUSTOMER_DATA, null)
+            ?: prefs.getString(KEY_USER_DATA, null)
+            ?: return null
+        return try {
+            gson.fromJson(json, Customer::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun clearSession(preserveBiometric: Boolean = true) {
+        val editor = prefs.edit()
             .remove(KEY_ACCESS_TOKEN)
             .remove(KEY_REFRESH_TOKEN)
             .remove(KEY_USER_DATA)
-            .apply()
+        if (!preserveBiometric) {
+            editor.remove(KEY_BIOMETRIC_ENABLED)
+                .remove(KEY_BIOMETRIC_REFRESH_TOKEN)
+                .remove(KEY_BIOMETRIC_CUSTOMER_DATA)
+        }
+        editor.apply()
     }
 
     fun isLoggedIn(): Boolean = !getAccessToken().isNullOrBlank()
