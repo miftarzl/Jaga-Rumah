@@ -68,6 +68,11 @@ interface ApiService {
         @Path("id") id: String
     ): Response<ApiResponse<Map<String, String>>>
 
+    @POST("mobile/devices/claim")
+    suspend fun claimDevice(
+        @Body request: ClaimDeviceRequest
+    ): Response<ApiResponse<ClaimDeviceResponse>>
+
     // ── Recordings ──────────────────────────────────────────────────────
     @GET("mobile/recordings")
     suspend fun getRecordings(

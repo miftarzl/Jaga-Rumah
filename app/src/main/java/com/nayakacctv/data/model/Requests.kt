@@ -51,3 +51,19 @@ data class TriggerSosRequest(
     @SerializedName("longitude") val longitude: Double? = null,
     @SerializedName("message") val message: String = "Panggilan Darurat Dikirim dari Aplikasi Mobile"
 )
+
+data class ClaimDeviceRequest(
+    @SerializedName("code") val code: String
+)
+
+data class ClaimDeviceResponse(
+    @SerializedName("deviceId") val deviceId: String? = null,
+    @SerializedName("deviceName") val deviceName: String? = null,
+    @SerializedName("serialNumber") val serialNumber: String? = null,
+    @SerializedName("model") val model: String? = null,
+    @SerializedName("device_id") val deviceIdSnake: String? = null,
+    @SerializedName("device_name") val deviceNameSnake: String? = null
+) {
+    val id: String get() = deviceId ?: deviceIdSnake ?: ""
+    val name: String get() = deviceName ?: deviceNameSnake ?: "Kamera Baru"
+}

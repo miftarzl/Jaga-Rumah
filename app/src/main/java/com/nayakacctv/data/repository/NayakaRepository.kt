@@ -109,6 +109,11 @@ class NayakaRepository(
         it.camera ?: throw Exception("Kamera tidak ditemukan")
     }
 
+    suspend fun claimDevice(code: String): Result<ClaimDeviceResponse> {
+        val cleanCode = code.trim().uppercase()
+        return safeApiCall { api.claimDevice(ClaimDeviceRequest(cleanCode)) }
+    }
+
     suspend fun updateCameraSettings(id: String, motion: Boolean, notification: Boolean): Result<CameraSettings> {
         return safeApiCall { api.updateCameraSettings(id, UpdateCameraSettingsRequest(motion, notification)) }
     }
