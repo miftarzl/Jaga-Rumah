@@ -60,6 +60,7 @@ class NayakaRepository(
         )
         return safeApiCall { api.login(req) }.mapCatching { tokens ->
             tokenManager.saveTokens(tokens.accessToken, tokens.refreshToken)
+            tokenManager.saveAuthProvider("password")
             val customer = tokens.customer ?: Customer("cust-1", "Pengguna Nayaka", email)
             tokenManager.saveCustomer(customer)
             customer
@@ -70,6 +71,7 @@ class NayakaRepository(
         val req = GoogleLoginRequest(idToken, tokenManager.getInstallationId())
         return safeApiCall { api.loginGoogle(req) }.mapCatching { tokens ->
             tokenManager.saveTokens(tokens.accessToken, tokens.refreshToken)
+            tokenManager.saveAuthProvider("google")
             val customer = tokens.customer ?: Customer("cust-google", "Pengguna Google", "user@gmail.com")
             tokenManager.saveCustomer(customer)
             customer
@@ -87,6 +89,7 @@ class NayakaRepository(
         )
         return safeApiCall { api.register(req) }.mapCatching { tokens ->
             tokenManager.saveTokens(tokens.accessToken, tokens.refreshToken)
+            tokenManager.saveAuthProvider("password")
             val customer = tokens.customer ?: Customer("cust-new", name, email)
             tokenManager.saveCustomer(customer)
             customer
@@ -103,15 +106,60 @@ class NayakaRepository(
 
     suspend fun getDashboard(): Result<DashboardSummary> = safeApiCall { api.getDashboard() }
 
-    suspend fun getCameras(): Result<List<Camera>> = safeApiCall { api.getCameras() }.map { it.cameras }
+    suspend fun getCameras(): Result<List<Camera>> = safeApiCall { api.getCameras() }.map { res ->
+        val deleted = tokenManager.getDeletedCameraIds()
+        val overrides = tokenManager.getCameraOverrides()
+        res.cameras
+            .filter { it.id !in deleted }
+            .map { cam ->
+                val edit = overrides[cam.id]
+                if (edit != null) {
+                    cam.copy(
+                        name = edit.name.ifBlank { cam.name },
+                        location = edit.location.ifBlank { cam.location },
+                        streamUrl = edit.streamUrl.ifBlank { cam.streamUrl }
+                    )
+                } else {
+                    cam
+                }
+            }
+    }
 
-    suspend fun getCameraDetail(id: String): Result<Camera> = safeApiCall { api.getCameraDetail(id) }.mapCatching {
-        it.camera ?: throw Exception("Kamera tidak ditemukan")
+    suspend fun getCameraDetail(id: String): Result<Camera> = safeApiCall { api.getCameraDetail(id) }.mapCatching { res ->
+        val cam = res.camera ?: throw Exception("Kamera tidak ditemukan")
+        val overrides = tokenManager.getCameraOverrides()
+        val edit = overrides[cam.id]
+        if (edit != null) {
+            cam.copy(
+                name = edit.name.ifBlank { cam.name },
+                location = edit.location.ifBlank { cam.location },
+                streamUrl = edit.streamUrl.ifBlank { cam.streamUrl }
+            )
+        } else {
+            cam
+        }
+    }
+
+    suspend fun getCameraStream(id: String): Result<CameraStream> =
+        safeApiCall { api.getCameraStream(id) }
+
+    suspend fun updateCamera(id: String, name: String, location: String, streamUrl: String): Result<Camera> {
+        tokenManager.saveCameraOverride(id, name.trim(), location.trim(), streamUrl.trim())
+        return getCameraDetail(id)
+    }
+
+    suspend fun deleteCamera(id: String): Result<Boolean> {
+        tokenManager.markCameraDeleted(id)
+        return Result.success(true)
     }
 
     suspend fun claimDevice(code: String): Result<ClaimDeviceResponse> {
         val cleanCode = code.trim().uppercase()
-        return safeApiCall { api.claimDevice(ClaimDeviceRequest(cleanCode)) }
+        val result = safeApiCall { api.claimDevice(ClaimDeviceRequest(cleanCode)) }
+        result.onSuccess { claimed ->
+            tokenManager.unmarkCameraDeleted(claimed.id)
+        }
+        return result
     }
 
     suspend fun updateCameraSettings(id: String, motion: Boolean, notification: Boolean): Result<CameraSettings> {
@@ -168,13 +216,13 @@ class NayakaRepository(
         it.document ?: TermsDoc()
     }
 
-    suspend fun logout() {
+    suspend fun logout(clearBiometric: Boolean = false) {
         withContext(Dispatchers.IO) {
             try {
                 api.logout()
             } catch (_: Exception) {}
-            // Keep biometric credentials if enabled so user can log back in with biometrics
-            tokenManager.clearSession(preserveBiometric = true)
+            // Keep biometric credentials if enabled so user can log back in with biometrics unless explicitly switching account
+            tokenManager.clearSession(preserveBiometric = !clearBiometric)
         }
     }
 
@@ -230,6 +278,7 @@ class NayakaRepository(
     fun getBiometricCustomer(): Customer? = tokenManager.getBiometricCustomer()
 
     fun isLoggedIn(): Boolean = tokenManager.isLoggedIn()
+    fun isGoogleUser(): Boolean = tokenManager.isGoogleUser()
     fun getCurrentCustomer(): Customer? = tokenManager.getCustomer()
     fun isBiometricEnabled(): Boolean = tokenManager.isBiometricEnabled()
     fun setBiometricEnabled(enabled: Boolean) = tokenManager.setBiometricEnabled(enabled)

@@ -216,23 +216,23 @@ fun NayakaTextField(
 fun CameraCard(
     camera: Camera,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSettingsClick: (() -> Unit)? = null
 ) {
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column {
-            // Thumbnail preview
+            // Thumbnail preview (clickable)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp)
                     .background(Color(0xFF1E293B))
+                    .clickable(onClick = onClick)
             ) {
                 if (!camera.thumbnailUrl.isNullOrBlank()) {
                     AsyncImage(
@@ -279,28 +279,50 @@ fun CameraCard(
                 }
             }
 
-            // Info
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = camera.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = TextMuted,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
+            // Info & Action Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = onClick)
+                ) {
                     Text(
-                        text = if (camera.location.isNotBlank()) camera.location else "Tanpa lokasi",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
+                        text = camera.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = TextMuted,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = if (camera.location.isNotBlank()) camera.location else "Tanpa lokasi",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                if (onSettingsClick != null) {
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = "Pengaturan Kamera",
+                            tint = PrimaryBlue
+                        )
+                    }
                 }
             }
         }

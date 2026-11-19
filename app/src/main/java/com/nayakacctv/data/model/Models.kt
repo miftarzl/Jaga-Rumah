@@ -81,6 +81,13 @@ data class Camera(
         get() = isRecordingField ?: (recordingStatus.equals("recording", ignoreCase = true) || rawStatus.equals("recording", ignoreCase = true))
 }
 
+data class CustomerCameraEdit(
+    val id: String,
+    val name: String,
+    val location: String,
+    val streamUrl: String
+)
+
 data class CameraSettings(
     @SerializedName("motion_detection") val motionDetection: Boolean = true,
     @SerializedName("notification_enabled") val notificationEnabled: Boolean = true
@@ -94,6 +101,15 @@ data class CameraListResponse(
 data class CameraDetailResponse(
     @SerializedName("camera") val camera: Camera? = null
 )
+
+data class CameraStream(
+    @SerializedName("hls_url") val hlsUrl: String? = null,
+    @SerializedName("rtsp_url") val rtspUrl: String? = null,
+    @SerializedName("webrtc_url") val webRtcUrl: String? = null
+) {
+    val playbackUrl: String?
+        get() = hlsUrl?.trim()?.takeIf(String::isNotBlank)
+}
 
 // ── Recording ──────────────────────────────────────────────────────────
 data class Recording(

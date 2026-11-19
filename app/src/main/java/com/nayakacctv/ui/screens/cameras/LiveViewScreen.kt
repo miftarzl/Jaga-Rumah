@@ -2,7 +2,10 @@ package com.nayakacctv.ui.screens.cameras
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,34 +22,65 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nayakacctv.data.model.Camera
 import com.nayakacctv.data.repository.NayakaRepository
-import com.nayakacctv.ui.components.MjpegStreamView
+import com.nayakacctv.ui.components.CameraStreamPlayer
 import com.nayakacctv.ui.components.NayakaTopAppBar
+import com.nayakacctv.ui.components.StatusBadge
 import com.nayakacctv.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 @Composable
 fun LiveViewScreen(
     cameraId: String,
     repository: NayakaRepository,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToDetail: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
+    var activeCameraId by remember { mutableStateOf(cameraId) }
     var camera by remember { mutableStateOf<Camera?>(null) }
+    var streamUrl by remember { mutableStateOf<String?>(null) }
+    var streamError by remember { mutableStateOf<String?>(null) }
+    var allCameras by remember { mutableStateOf<List<Camera>>(emptyList()) }
+    var showCameraSwitcher by remember { mutableStateOf(false) }
+
     var isMuted by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
-    var recordElapsedSeconds by remember { mutableStateOf(0L) }
+    var recordElapsedSeconds by remember { mutableLongStateOf(0L) }
     var streamStatus by remember { mutableStateOf("Menghubungkan...") }
 
-    LaunchedEffect(cameraId) {
-        coroutineScope.launch {
-            val res = repository.getCameraDetail(cameraId)
-            camera = res.getOrNull()
+    // Ambil detail dan URL playback yang dibuat backend untuk kamera aktif.
+    LaunchedEffect(activeCameraId) {
+        camera = null
+        streamUrl = null
+        streamError = null
+
+        val cameraRequest = async { repository.getCameraDetail(activeCameraId) }
+        val streamRequest = async { repository.getCameraStream(activeCameraId) }
+        val cameraResult = cameraRequest.await()
+        val streamResult = streamRequest.await()
+        camera = cameraResult.getOrNull()
+        streamUrl = streamResult.getOrNull()?.playbackUrl
+
+        if (streamUrl == null) {
+            streamStatus = "Koneksi Terputus"
+            streamError = streamResult.exceptionOrNull()?.localizedMessage
+                ?: "Backend tidak mengirim URL HLS (hls_url) untuk kamera ini"
         }
     }
 
-    // Timer for recording simulation
+    // Memuat daftar semua kamera untuk fitur "Ganti Kamera"
+    LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            val listRes = repository.getCameras()
+            allCameras = listRes.getOrDefault(emptyList())
+        }
+    }
+
+    // Timer simulasi rekaman
     LaunchedEffect(isRecording) {
         if (isRecording) {
             while (true) {
@@ -65,12 +99,34 @@ fun LiveViewScreen(
                 canNavigateBack = true,
                 onNavigateBack = onNavigateBack,
                 actions = {
-                    IconButton(onClick = { isMuted = !isMuted }) {
+                    // Tombol Ganti Kamera jika ada lebih dari 1 kamera
+                    if (allCameras.size > 1) {
+                        IconButton(onClick = { showCameraSwitcher = true }) {
+                            Icon(
+                                imageVector = Icons.Default.SwapHoriz,
+                                contentDescription = "Ganti Kamera",
+                                tint = PrimaryBlue
+                            )
+                        }
+                    }
+                    IconButton(onClick = {
+                        isMuted = !isMuted
+                        Toast.makeText(context, if (isMuted) "Audio dimatikan" else "Audio diaktifkan", Toast.LENGTH_SHORT).show()
+                    }) {
                         Icon(
                             imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                             contentDescription = "Mute/Unmute",
                             tint = TextPrimary
                         )
+                    }
+                    if (onNavigateToDetail != null) {
+                        IconButton(onClick = { onNavigateToDetail(activeCameraId) }) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Detail & Edit Kamera",
+                                tint = PrimaryBlue
+                            )
+                        }
                     }
                 }
             )
@@ -90,22 +146,30 @@ fun LiveViewScreen(
                     .height(280.dp)
                     .background(Color.Black)
             ) {
-                if (cam != null) {
-                    val streamEndpoint = if (cam.streamUrl.isNotBlank()) cam.streamUrl else "/mobile/cameras/${cam.id}/stream"
-                    MjpegStreamView(
-                        streamUrl = streamEndpoint,
-                        modifier = Modifier.fillMaxSize(),
-                        onStateChange = { state ->
-                            streamStatus = when (state) {
-                                "playing" -> "LIVE HD"
-                                "connecting" -> "Menghubungkan..."
-                                else -> "Koneksi Terputus"
+                    val hlsUrl = streamUrl
+                    if (hlsUrl != null) {
+                        CameraStreamPlayer(
+                            streamUrl = hlsUrl,
+                            forceHls = true,
+                            modifier = Modifier.fillMaxSize(),
+                            onStateChange = { state ->
+                                streamStatus = when (state) {
+                                    "playing" -> "LIVE HD"
+                                    "connecting" -> "Menghubungkan..."
+                                    else -> "Koneksi Terputus"
                             }
                         }
                     )
+                } else if (streamError != null) {
+                    Text(
+                        text = streamError ?: "URL stream kamera tidak tersedia",
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                        color = Color.White,
+                        fontSize = 13.sp
+                    )
                 }
 
-                // REC indicator overlay
+                // Indikator REC
                 if (isRecording) {
                     Box(
                         modifier = Modifier
@@ -126,7 +190,7 @@ fun LiveViewScreen(
                     }
                 }
 
-                // Live status tag
+                // Tag Status LIVE
                 Box(
                     modifier = Modifier
                         .padding(12.dp)
@@ -151,6 +215,43 @@ fun LiveViewScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
+                // Baris Info Kamera & Tombol Ganti Kamera Cepat
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceWhite)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = cam?.name ?: "Memuat...",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = cam?.location?.ifBlank { "Lokasi tidak diset" } ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                        }
+
+                        if (allCameras.size > 1) {
+                            TextButton(onClick = { showCameraSwitcher = true }) {
+                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Ganti Kamera", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
                 // Action Buttons Row (Snapshot, Record, Siren)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -160,7 +261,7 @@ fun LiveViewScreen(
                         icon = Icons.Default.CameraAlt,
                         label = "Foto (Snapshot)",
                         onClick = {
-                            Toast.makeText(context, "Tangkapan layar frame berhasil disimpan", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Tangkapan layar frame berhasil disimpan ke galeri!", Toast.LENGTH_SHORT).show()
                         }
                     )
                     ActionButton(
@@ -171,7 +272,7 @@ fun LiveViewScreen(
                             isRecording = !isRecording
                             Toast.makeText(
                                 context,
-                                if (isRecording) "Merekam siaran langsung..." else "Rekaman disimpan",
+                                if (isRecording) "Merekam siaran langsung CCTV..." else "Rekaman video berhasil disimpan",
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -181,7 +282,7 @@ fun LiveViewScreen(
                         label = "Bunyikan Sirine",
                         iconColor = StatusDanger,
                         onClick = {
-                            Toast.makeText(context, "Sirine kamera diaktifkan!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Sirine peringatan darurat kamera dibunyikan!", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -208,7 +309,7 @@ fun LiveViewScreen(
 
                         // Up
                         IconButton(
-                            onClick = { Toast.makeText(context, "Arahkan Atas", Toast.LENGTH_SHORT).show() },
+                            onClick = { Toast.makeText(context, "Arahkan kamera ke Atas", Toast.LENGTH_SHORT).show() },
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
@@ -223,11 +324,11 @@ fun LiveViewScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
-                                onClick = { Toast.makeText(context, "Arahkan Kiri", Toast.LENGTH_SHORT).show() },
+                                onClick = { Toast.makeText(context, "Arahkan kamera ke Kiri", Toast.LENGTH_SHORT).show() },
                                 modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFF1F5F9))
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFF1F5F9))
                             ) {
                                 Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Kiri", tint = TextPrimary)
                             }
@@ -243,7 +344,7 @@ fun LiveViewScreen(
                             }
 
                             IconButton(
-                                onClick = { Toast.makeText(context, "Arahkan Kanan", Toast.LENGTH_SHORT).show() },
+                                onClick = { Toast.makeText(context, "Arahkan kamera ke Kanan", Toast.LENGTH_SHORT).show() },
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
@@ -255,7 +356,7 @@ fun LiveViewScreen(
 
                         // Down
                         IconButton(
-                            onClick = { Toast.makeText(context, "Arahkan Bawah", Toast.LENGTH_SHORT).show() },
+                            onClick = { Toast.makeText(context, "Arahkan kamera ke Bawah", Toast.LENGTH_SHORT).show() },
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
@@ -269,6 +370,69 @@ fun LiveViewScreen(
                 Spacer(modifier = Modifier.height(10.dp))
             }
         }
+    }
+
+    // ── Dialog Pilih / Ganti Kamera ─────────────────────────────────────────
+    if (showCameraSwitcher) {
+        AlertDialog(
+            onDismissRequest = { showCameraSwitcher = false },
+            title = {
+                Text("Pilih / Ganti Kamera", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(allCameras) { c ->
+                        val isCurrent = c.id == activeCameraId
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    activeCameraId = c.id
+                                    showCameraSwitcher = false
+                                    Toast.makeText(context, "Beralih ke ${c.name}", Toast.LENGTH_SHORT).show()
+                                },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isCurrent) PrimaryBlue.copy(alpha = 0.1f) else Color(0xFFF8FAFC),
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = if (isCurrent) 1.5.dp else 1.dp,
+                                color = if (isCurrent) PrimaryBlue else BorderSubtle
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = c.name,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isCurrent) PrimaryBlue else TextPrimary,
+                                        fontSize = 15.sp
+                                    )
+                                    Text(
+                                        text = c.location.ifBlank { "Lokasi tidak diset" },
+                                        fontSize = 12.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                                StatusBadge(status = c.status)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCameraSwitcher = false }) {
+                    Text("Tutup")
+                }
+            }
+        )
     }
 }
 

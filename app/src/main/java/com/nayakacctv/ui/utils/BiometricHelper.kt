@@ -81,10 +81,20 @@ object BiometricHelper {
             }
         )
 
+        val biometricManager = BiometricManager.from(activity)
+        val canStrong = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
+        val authenticators = if (canStrong) {
+            BiometricManager.Authenticators.BIOMETRIC_STRONG
+        } else {
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK
+        }
+
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
             .setNegativeButtonText(negativeButtonText)
+            .setAllowedAuthenticators(authenticators)
+            .setConfirmationRequired(true)
             .build()
 
         prompt.authenticate(promptInfo)

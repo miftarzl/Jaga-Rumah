@@ -451,7 +451,8 @@ fun CamerasScreen(
                     items(filteredCameras) { camera ->
                         CameraCard(
                             camera = camera,
-                            onClick = { onNavigateToLiveView(camera.id) }
+                            onClick = { onNavigateToLiveView(camera.id) },
+                            onSettingsClick = { onNavigateToCameraDetail(camera.id) }
                         )
                     }
                 }

@@ -96,6 +96,12 @@ dependencies {
     // WebKit (MJPEG WebView Streamer)
     implementation(libs.androidx.webkit)
 
+    // Native CCTV playback (HLS and RTSP)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.exoplayer.rtsp)
+    implementation(libs.androidx.media3.ui)
+
     // Google Sign-In & Credential Manager
     implementation(libs.play.services.auth)
     implementation("androidx.credentials:credentials:1.3.0")

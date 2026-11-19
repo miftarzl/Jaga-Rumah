@@ -66,7 +66,7 @@ interface ApiService {
     @GET("mobile/cameras/{id}/stream")
     suspend fun getCameraStream(
         @Path("id") id: String
-    ): Response<ApiResponse<Map<String, String>>>
+    ): Response<ApiResponse<CameraStream>>
 
     @POST("mobile/devices/claim")
     suspend fun claimDevice(

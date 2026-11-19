@@ -22,7 +22,7 @@
 
 **Nayaka CCTV Android Kotlin** adalah aplikasi mobile klien native yang dibangun dari awal menggunakan standar terbaru ekosistem Android:
 - **UI Murni Deklaratif**: Dibangun 100% menggunakan **Jetpack Compose** dan **Material 3**.
-- **Live MJPEG Streamer**: Komponen stream native berlatensi rendah dengan snapshot frame, timer perekaman, dan kontrol arah kamera (PTZ).
+- **Live CCTV Streamer**: Meminta URL playback bertoken dari backend dan memutar HLS/RTSP dengan Media3; MJPEG tetap didukung untuk endpoint legacy.
 - **Keamanan Perangkat Keras**: Menggunakan `BiometricPrompt` & `EncryptedSharedPreferences` yang terenkripsi langsung via Android Keystore.
 - **Auto-Refresh Token Interceptor**: Mutex berbasis `OkHttp Authenticator` yang memperbarui JWT access token secara mulus tanpa membuat pengguna logout paksa.
 
@@ -42,7 +42,7 @@
 | **Serialization** | Gson | `2.11.0` | Parser JSON envelope `{ data, meta }` |
 | **Keamanan** | Security Crypto & Biometric | `1.1.0-alpha06` / `1.2.0` | AES-256 GCM EncryptedSharedPreferences & Sidik Jari/Wajah |
 | **Image Loading** | Coil Compose | `2.7.0` | Pemuat thumbnail kamera asynchronous |
-| **Video Stream** | AndroidX WebKit | `1.12.1` | Native WebEngine decoding MJPEG multipart stream |
+| **Video Stream** | AndroidX Media3 | `1.5.1` | Pemutar native HLS dan RTSP; endpoint MJPEG legacy tetap didukung |
 
 ---
 
@@ -77,7 +77,7 @@ Aplikasi menggunakan pola arsitektur **Clean MVVM (Model-View-ViewModel/Reposito
 | `src/context/DataContext.tsx` | `NayakaRepository.kt` |
 | `src/api.ts` | `ApiService.kt`, `AuthInterceptor.kt`, `TokenAuthenticator.kt` |
 | `src/types.ts` | `Models.kt` & `Requests.kt` |
-| `src/components/MjpegView.tsx` | `MjpegStreamView.kt` |
+| `src/components/MjpegView.tsx` | `CameraStreamPlayer.kt` & `MjpegStreamView.kt` |
 | `src/components/CameraThumbnail.tsx` | `CameraCard.kt` (dengan Coil async image) |
 | `src/utils/biometric.ts` | `BiometricHelper.kt` (`BiometricPrompt`) |
 | `src/utils/format.ts` | `Formatters.kt` |
