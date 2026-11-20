@@ -15,6 +15,25 @@ class NayakaRepository(
     private val tokenManager: TokenManager
 ) {
     private val gson = Gson()
+    private val dashboardCache = TimedMemoryCache<DashboardSummary>(ttlMillis = 15_000)
+    private val camerasCache = TimedMemoryCache<List<Camera>>(ttlMillis = 30_000)
+    private val cameraDetailCache = TimedMemoryCache<Camera>(ttlMillis = 30_000)
+    private val recordingsCache = TimedMemoryCache<List<Recording>>(ttlMillis = 30_000)
+    private val alertsCache = TimedMemoryCache<List<AlertItem>>(ttlMillis = 15_000)
+
+    private fun clearCameraCaches() {
+        dashboardCache.clear()
+        camerasCache.clear()
+        cameraDetailCache.clear()
+    }
+
+    private fun clearDataCaches() {
+        dashboardCache.clear()
+        camerasCache.clear()
+        cameraDetailCache.clear()
+        recordingsCache.clear()
+        alertsCache.clear()
+    }
 
     private suspend fun <T> safeApiCall(call: suspend () -> Response<ApiResponse<T>>): Result<T> {
         return withContext(Dispatchers.IO) {
@@ -63,6 +82,7 @@ class NayakaRepository(
             tokenManager.saveAuthProvider("password")
             val customer = tokens.customer ?: Customer("cust-1", "Pengguna Nayaka", email)
             tokenManager.saveCustomer(customer)
+            clearDataCaches()
             customer
         }
     }
@@ -74,6 +94,7 @@ class NayakaRepository(
             tokenManager.saveAuthProvider("google")
             val customer = tokens.customer ?: Customer("cust-google", "Pengguna Google", "user@gmail.com")
             tokenManager.saveCustomer(customer)
+            clearDataCaches()
             customer
         }
     }
@@ -92,6 +113,7 @@ class NayakaRepository(
             tokenManager.saveAuthProvider("password")
             val customer = tokens.customer ?: Customer("cust-new", name, email)
             tokenManager.saveCustomer(customer)
+            clearDataCaches()
             customer
         }
     }
@@ -104,14 +126,41 @@ class NayakaRepository(
         return safeApiCall { api.resetPassword(ResetPasswordRequest(email, code, newPass)) }.map { "Kata sandi berhasil direset." }
     }
 
-    suspend fun getDashboard(): Result<DashboardSummary> = safeApiCall { api.getDashboard() }
+    suspend fun getDashboard(forceRefresh: Boolean = false): Result<DashboardSummary> =
+        dashboardCache.getOrLoad(forceRefresh = forceRefresh) {
+            safeApiCall { api.getDashboard() }
+        }
 
-    suspend fun getCameras(): Result<List<Camera>> = safeApiCall { api.getCameras() }.map { res ->
-        val deleted = tokenManager.getDeletedCameraIds()
-        val overrides = tokenManager.getCameraOverrides()
-        res.cameras
-            .filter { it.id !in deleted }
-            .map { cam ->
+    suspend fun getCameras(forceRefresh: Boolean = false): Result<List<Camera>> =
+        camerasCache.getOrLoad(forceRefresh = forceRefresh) {
+            safeApiCall { api.getCameras() }.map { res ->
+                val deleted = tokenManager.getDeletedCameraIds()
+                val overrides = tokenManager.getCameraOverrides()
+                res.cameras
+                    .filter { it.id !in deleted }
+                    .map { cam ->
+                        val edit = overrides[cam.id]
+                        if (edit != null) {
+                            cam.copy(
+                                name = edit.name.ifBlank { cam.name },
+                                location = edit.location.ifBlank { cam.location },
+                                streamUrl = edit.streamUrl.ifBlank { cam.streamUrl }
+                            )
+                        } else {
+                            cam
+                        }
+                    }
+            }
+        }
+
+    suspend fun getCameraDetail(id: String, forceRefresh: Boolean = false): Result<Camera> =
+        cameraDetailCache.getOrLoad(
+            key = id,
+            forceRefresh = forceRefresh
+        ) {
+            safeApiCall { api.getCameraDetail(id) }.mapCatching { res ->
+                val cam = res.camera ?: throw Exception("Kamera tidak ditemukan")
+                val overrides = tokenManager.getCameraOverrides()
                 val edit = overrides[cam.id]
                 if (edit != null) {
                     cam.copy(
@@ -123,33 +172,20 @@ class NayakaRepository(
                     cam
                 }
             }
-    }
-
-    suspend fun getCameraDetail(id: String): Result<Camera> = safeApiCall { api.getCameraDetail(id) }.mapCatching { res ->
-        val cam = res.camera ?: throw Exception("Kamera tidak ditemukan")
-        val overrides = tokenManager.getCameraOverrides()
-        val edit = overrides[cam.id]
-        if (edit != null) {
-            cam.copy(
-                name = edit.name.ifBlank { cam.name },
-                location = edit.location.ifBlank { cam.location },
-                streamUrl = edit.streamUrl.ifBlank { cam.streamUrl }
-            )
-        } else {
-            cam
         }
-    }
 
     suspend fun getCameraStream(id: String): Result<CameraStream> =
         safeApiCall { api.getCameraStream(id) }
 
     suspend fun updateCamera(id: String, name: String, location: String, streamUrl: String): Result<Camera> {
         tokenManager.saveCameraOverride(id, name.trim(), location.trim(), streamUrl.trim())
-        return getCameraDetail(id)
+        clearCameraCaches()
+        return getCameraDetail(id, forceRefresh = true)
     }
 
     suspend fun deleteCamera(id: String): Result<Boolean> {
         tokenManager.markCameraDeleted(id)
+        clearCameraCaches()
         return Result.success(true)
     }
 
@@ -158,27 +194,42 @@ class NayakaRepository(
         val result = safeApiCall { api.claimDevice(ClaimDeviceRequest(cleanCode)) }
         result.onSuccess { claimed ->
             tokenManager.unmarkCameraDeleted(claimed.id)
+            clearCameraCaches()
         }
         return result
     }
 
     suspend fun updateCameraSettings(id: String, motion: Boolean, notification: Boolean): Result<CameraSettings> {
         return safeApiCall { api.updateCameraSettings(id, UpdateCameraSettingsRequest(motion, notification)) }
+            .onSuccess { clearCameraCaches() }
     }
 
-    suspend fun getRecordings(cameraId: String? = null, from: String? = null, to: String? = null): Result<List<Recording>> {
-        val localList = tokenManager.getLocalRecordings().filter { r ->
-            cameraId == null || r.cameraId == cameraId
+    suspend fun getRecordings(
+        cameraId: String? = null,
+        from: String? = null,
+        to: String? = null,
+        forceRefresh: Boolean = false
+    ): Result<List<Recording>> {
+        val cacheKey = listOf(cameraId, from, to).joinToString("|") { value ->
+            value?.let { "${it.length}:$it" } ?: "-:"
         }
-        val remoteRes = safeApiCall { api.getRecordings(cameraId, from, to) }
-        val remoteList = remoteRes.getOrNull()?.recordings?.map { r ->
-            r.copy(
-                duration = if (r.duration > 0) r.duration else (r.durationSeconds ?: 0L),
-                cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: "")
-            )
-        } ?: emptyList()
-        val combined: List<Recording> = (localList + remoteList).distinctBy { it.id }
-        return Result.success(combined)
+        return recordingsCache.getOrLoad(key = cacheKey, forceRefresh = forceRefresh) {
+            val localList = tokenManager.getLocalRecordings().filter { r ->
+                cameraId == null || r.cameraId == cameraId
+            }
+            val remoteRes = safeApiCall { api.getRecordings(cameraId, from, to) }
+            remoteRes.map { res ->
+                val remoteList = res.recordings.map { r ->
+                    r.copy(
+                        duration = if (r.duration > 0) r.duration else (r.durationSeconds ?: 0L),
+                        cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: "")
+                    )
+                }
+                (localList + remoteList).distinctBy { it.id }
+            }.recoverCatching { error ->
+                if (localList.isNotEmpty()) localList else throw error
+            }
+        }
     }
 
     suspend fun getRecordingDetail(id: String): Result<Recording> {
@@ -197,25 +248,32 @@ class NayakaRepository(
 
     fun saveLocalRecording(recording: Recording) {
         tokenManager.saveLocalRecording(recording)
+        recordingsCache.clear()
     }
 
     fun deleteLocalRecording(id: String) {
         tokenManager.deleteLocalRecording(id)
+        recordingsCache.clear()
     }
 
-    suspend fun getAlerts(): Result<List<AlertItem>> = safeApiCall { api.getAlerts() }.map { res ->
-        res.alerts.map { a ->
-            a.copy(
-                time = if (a.time.isNotBlank()) a.time else (a.occurredAt ?: ""),
-                read = a.isRead ?: a.read,
-                cameraId = if (a.cameraId.isNotBlank()) a.cameraId else (a.deviceId ?: "")
-            )
+    suspend fun getAlerts(forceRefresh: Boolean = false): Result<List<AlertItem>> =
+        alertsCache.getOrLoad(forceRefresh = forceRefresh) {
+            safeApiCall { api.getAlerts() }.map { res ->
+                res.alerts.map { a ->
+                    a.copy(
+                        time = if (a.time.isNotBlank()) a.time else (a.occurredAt ?: ""),
+                        read = a.isRead ?: a.read,
+                        cameraId = if (a.cameraId.isNotBlank()) a.cameraId else (a.deviceId ?: "")
+                    )
+                }
+            }
         }
-    }
 
-    suspend fun markAlertRead(id: String): Result<Boolean> = safeApiCall { api.markAlertRead(id) }.map { true }
+    suspend fun markAlertRead(id: String): Result<Boolean> =
+        safeApiCall { api.markAlertRead(id) }.map { true }.onSuccess { alertsCache.clear() }
 
-    suspend fun markAllAlertsRead(): Result<Boolean> = safeApiCall { api.markAllAlertsRead() }.map { true }
+    suspend fun markAllAlertsRead(): Result<Boolean> =
+        safeApiCall { api.markAllAlertsRead() }.map { true }.onSuccess { alertsCache.clear() }
 
     suspend fun getEmergencyContacts(): Result<List<EmergencyContact>> = safeApiCall { api.getEmergencyContacts() }.map { it.contacts }
 
@@ -233,6 +291,7 @@ class NayakaRepository(
     }
 
     suspend fun logout(clearBiometric: Boolean = false) {
+        clearDataCaches()
         withContext(Dispatchers.IO) {
             try {
                 api.logout()
@@ -240,6 +299,7 @@ class NayakaRepository(
             // Keep biometric credentials if enabled so user can log back in with biometrics unless explicitly switching account
             tokenManager.clearSession(preserveBiometric = !clearBiometric)
         }
+        clearDataCaches()
     }
 
     suspend fun loginWithBiometric(): Result<Customer> {
@@ -253,6 +313,7 @@ class NayakaRepository(
         return safeApiCall { api.refreshToken(req) }.mapCatching { tokens ->
             tokenManager.saveTokens(tokens.accessToken, tokens.refreshToken)
             tokenManager.updateBiometricToken(tokens.refreshToken)
+            clearDataCaches()
 
             val customer = try {
                 val meRes = api.getMe()

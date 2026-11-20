@@ -59,17 +59,17 @@ fun CamerasScreen(
 
     val filters = listOf("Semua", "Online", "Merekam", "Offline")
 
-    val loadCameras = {
+    val loadCameras: (Boolean) -> Unit = { forceRefresh ->
         coroutineScope.launch {
             isLoading = true
-            val res = repository.getCameras()
+            val res = repository.getCameras(forceRefresh = forceRefresh)
             cameras = res.getOrDefault(emptyList())
             isLoading = false
         }
     }
 
     LaunchedEffect(Unit) {
-        loadCameras()
+        loadCameras(false)
     }
 
     // Auto-focus ke input kode klaim saat dialog terbuka
@@ -111,7 +111,7 @@ fun CamerasScreen(
                 result.onSuccess { claimed ->
                     val cameraName = claimed.name
                     claimSuccess = "Kamera \"$cameraName\" berhasil diklaim!"
-                    loadCameras()
+                    loadCameras(true)
                     showClaimDialog = false
                     snackbarHostState.showSnackbar("Kamera \"$cameraName\" berhasil ditambahkan.")
                 }.onFailure { err ->
@@ -315,7 +315,7 @@ fun CamerasScreen(
                             tint = PrimaryBlue
                         )
                     }
-                    IconButton(onClick = { loadCameras() }) {
+                    IconButton(onClick = { loadCameras(true) }) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Muat Ulang",
@@ -434,7 +434,7 @@ fun CamerasScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Klaim Kamera Baru", color = Color.White, fontWeight = FontWeight.Bold)
                             }
-                            OutlinedButton(onClick = { loadCameras() }) {
+                            OutlinedButton(onClick = { loadCameras(true) }) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Muat Ulang")

@@ -10,6 +10,7 @@
 - [Gambaran Umum](#-gambaran-umum)
 - [Teknologi & Dependensi](#-teknologi--dependensi)
 - [Arsitektur Proyek](#-arsitektur-proyek)
+- [Performa & Strategi Caching](#-performa--strategi-caching)
 - [Pemetaan Migrasi (React Native ke Kotlin)](#-pemetaan-migrasi-react-native-ke-kotlin)
 - [Struktur Direktori](#-struktur-direktori)
 - [Konfigurasi API & Lingkungan](#-konfigurasi-api--lingkungan)
@@ -65,6 +66,36 @@ Aplikasi menggunakan pola arsitektur **Clean MVVM (Model-View-ViewModel/Reposito
    ├── Network: Retrofit2 + ApiService + AuthInterceptor + TokenAuthenticator
    └── Local: TokenManager (EncryptedSharedPreferences)
 ```
+
+---
+
+## ⚡ Performa & Strategi Caching
+
+**Caching** menyimpan hasil data yang baru diambil agar halaman dapat menampilkannya kembali tanpa selalu meminta data yang sama ke server. Aplikasi kini menggunakan **cache in-memory dengan masa berlaku (TTL)** untuk mengurangi request dan loading berulang saat pengguna berpindah halaman.
+
+### Data yang di-cache
+
+| Data | TTL |
+| :--- | :--- |
+| Ringkasan Dashboard | 15 detik |
+| Daftar kamera dan detail kamera | 30 detik |
+| Daftar rekaman | 30 detik |
+| Alert | 15 detik |
+
+Cache berada di `NayakaRepository`, yang hidup selama proses aplikasi. Karena itu, hasilnya tetap tersedia saat composable tab dibuat ulang. Request serentak untuk cache key yang sama digabungkan. Jika cache kedaluwarsa, data dimuat kembali dari server.
+
+Tombol **Muat Ulang** pada Dashboard dan Kamera melewati cache. Cache terkait juga dibersihkan setelah perubahan kamera, perubahan status Alert, perubahan rekaman lokal, atau logout; sesi login baru memulai dengan cache kosong.
+
+Cache hanya berlaku selama aplikasi berjalan; cache tidak disimpan setelah proses aplikasi dihentikan. Cache yang kedaluwarsa dimuat ulang ketika halaman meminta data, bukan diperbarui di latar belakang. **Room/database lokal** dapat dipertimbangkan kemudian jika data harus tetap tersedia setelah aplikasi ditutup atau ketika offline.
+
+### Optimasi lanjutan
+
+- Ukur waktu tunggu dan request berulang dengan Android Studio Network Inspector/Profiler sebelum menentukan optimasi berikutnya.
+- Gunakan pagination untuk daftar besar jika endpoint backend mendukungnya.
+- Pastikan live stream berhenti saat pengguna meninggalkan layar dan hanya stream yang sedang ditonton yang aktif.
+- Pertimbangkan cache persisten hanya jika hasil pengukuran atau kebutuhan offline membenarkannya.
+
+**Load balancing** menangani beban banyak request/pengguna pada sisi server; fitur itu tidak mencegah satu aplikasi mengulang request ketika halaman dibuka. Pertimbangkan load balancing jika metrik backend menunjukkan server kewalahan oleh akses bersamaan, bukan sebagai langkah pertama untuk mengatasi loading ulang di aplikasi.
 
 ---
 

@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -33,8 +34,6 @@ fun MainTabsScreen(
     onNavigateToTerms: () -> Unit,
     onLogout: () -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf<BottomTab>(BottomTab.Dashboard) }
-
     val tabs = listOf(
         BottomTab.Dashboard,
         BottomTab.Cameras,
@@ -42,6 +41,8 @@ fun MainTabsScreen(
         BottomTab.Alerts,
         BottomTab.Profile
     )
+    var selectedTabRoute by rememberSaveable { mutableStateOf(BottomTab.Dashboard.route) }
+    val selectedTab = tabs.firstOrNull { it.route == selectedTabRoute } ?: BottomTab.Dashboard
 
     Scaffold(
         bottomBar = {
@@ -53,7 +54,7 @@ fun MainTabsScreen(
                     val isSelected = selectedTab == tab
                     NavigationBarItem(
                         selected = isSelected,
-                        onClick = { selectedTab = tab },
+                        onClick = { selectedTabRoute = tab.route },
                         icon = {
                             Icon(
                                 imageVector = when (tab) {
@@ -90,7 +91,7 @@ fun MainTabsScreen(
                     onNavigateToCameraDetail = onNavigateToCameraDetail,
                     onNavigateToLiveView = onNavigateToLiveView,
                     onNavigateToEmergency = onNavigateToEmergency,
-                    onNavigateToAlerts = { selectedTab = BottomTab.Alerts }
+                    onNavigateToAlerts = { selectedTabRoute = BottomTab.Alerts.route }
                 )
                 BottomTab.Cameras -> CamerasScreen(
                     repository = repository,

@@ -38,14 +38,14 @@ fun DashboardScreen(
     var isLoading by remember { mutableStateOf(true) }
     val customer = repository.getCurrentCustomer()
 
-    val refreshData = {
+    val refreshData: (Boolean) -> Unit = { forceRefresh ->
         coroutineScope.launch {
             isLoading = true
-            val res = repository.getDashboard()
+            val res = repository.getDashboard(forceRefresh = forceRefresh)
             val dashSummary = res.getOrNull()
             if (dashSummary != null) {
                 if (dashSummary.cameras.isEmpty()) {
-                    val camRes = repository.getCameras()
+                    val camRes = repository.getCameras(forceRefresh = forceRefresh)
                     val camList = camRes.getOrDefault(emptyList())
                     if (camList.isNotEmpty()) {
                         summary = dashSummary.copy(
@@ -62,7 +62,7 @@ fun DashboardScreen(
                     summary = dashSummary
                 }
             } else {
-                val camRes = repository.getCameras()
+                val camRes = repository.getCameras(forceRefresh = forceRefresh)
                 val camList = camRes.getOrDefault(emptyList())
                 if (camList.isNotEmpty()) {
                     summary = DashboardSummary(
@@ -79,7 +79,7 @@ fun DashboardScreen(
     }
 
     LaunchedEffect(Unit) {
-        refreshData()
+        refreshData(false)
     }
 
     Scaffold(
@@ -117,7 +117,7 @@ fun DashboardScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         // Refresh Button
                         IconButton(
-                            onClick = { refreshData() },
+                            onClick = { refreshData(true) },
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(CircleShape)
@@ -289,7 +289,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             OutlinedButton(
-                                onClick = { refreshData() },
+                                onClick = { refreshData(true) },
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
