@@ -167,17 +167,25 @@ class NayakaRepository(
     }
 
     suspend fun getRecordings(cameraId: String? = null, from: String? = null, to: String? = null): Result<List<Recording>> {
-        return safeApiCall { api.getRecordings(cameraId, from, to) }.map { res ->
-            res.recordings.map { r ->
-                r.copy(
-                    duration = if (r.duration > 0) r.duration else (r.durationSeconds ?: 0L),
-                    cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: "")
-                )
-            }
+        val localList = tokenManager.getLocalRecordings().filter { r ->
+            cameraId == null || r.cameraId == cameraId
         }
+        val remoteRes = safeApiCall { api.getRecordings(cameraId, from, to) }
+        val remoteList = remoteRes.getOrNull()?.recordings?.map { r ->
+            r.copy(
+                duration = if (r.duration > 0) r.duration else (r.durationSeconds ?: 0L),
+                cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: "")
+            )
+        } ?: emptyList()
+        val combined: List<Recording> = (localList + remoteList).distinctBy { it.id }
+        return Result.success(combined)
     }
 
     suspend fun getRecordingDetail(id: String): Result<Recording> {
+        val local = tokenManager.getLocalRecordings().find { it.id == id }
+        if (local != null) {
+            return Result.success(local)
+        }
         return safeApiCall { api.getRecordingDetail(id) }.mapCatching { res ->
             val r = res.recording ?: throw Exception("Rekaman tidak ditemukan")
             r.copy(
@@ -185,6 +193,14 @@ class NayakaRepository(
                 cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: "")
             )
         }
+    }
+
+    fun saveLocalRecording(recording: Recording) {
+        tokenManager.saveLocalRecording(recording)
+    }
+
+    fun deleteLocalRecording(id: String) {
+        tokenManager.deleteLocalRecording(id)
     }
 
     suspend fun getAlerts(): Result<List<AlertItem>> = safeApiCall { api.getAlerts() }.map { res ->

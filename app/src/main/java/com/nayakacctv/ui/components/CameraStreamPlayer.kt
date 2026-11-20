@@ -1,20 +1,19 @@
 package com.nayakacctv.ui.components
 
+import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.PixelCopy
+import android.view.SurfaceView
+import android.view.TextureView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,11 +31,28 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.nayakacctv.ui.theme.PrimaryBlue
 
+class CameraStreamController {
+    var captureFrameCallback: ((onCaptured: (Bitmap?) -> Unit) -> Unit)? = null
+
+    fun captureFrame(onCaptured: (Bitmap?) -> Unit) {
+        val callback = captureFrameCallback
+        if (callback != null) {
+            callback(onCaptured)
+        } else {
+            onCaptured(null)
+        }
+    }
+}
+
+@Composable
+fun rememberCameraStreamController(): CameraStreamController = remember { CameraStreamController() }
+
 @Composable
 fun CameraStreamPlayer(
     streamUrl: String,
     modifier: Modifier = Modifier,
     forceHls: Boolean = false,
+    controller: CameraStreamController? = null,
     onStateChange: (String) -> Unit = {}
 ) {
     val uri = remember(streamUrl) { Uri.parse(streamUrl) }
@@ -48,10 +64,16 @@ fun CameraStreamPlayer(
             streamUrl = streamUrl,
             forceHls = isHls,
             modifier = modifier,
+            controller = controller,
             onStateChange = onStateChange
         )
     } else {
-        MjpegStreamView(streamUrl, modifier, onStateChange)
+        MjpegStreamView(
+            streamUrl = streamUrl,
+            modifier = modifier,
+            controller = controller,
+            onStateChange = onStateChange
+        )
     }
 }
 
@@ -60,6 +82,7 @@ private fun Media3CameraStreamPlayer(
     streamUrl: String,
     forceHls: Boolean,
     modifier: Modifier,
+    controller: CameraStreamController? = null,
     onStateChange: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -68,6 +91,7 @@ private fun Media3CameraStreamPlayer(
     var hasError by remember(streamUrl) { mutableStateOf(false) }
     var isBuffering by remember(streamUrl) { mutableStateOf(true) }
     var errorMessage by remember(streamUrl) { mutableStateOf<String?>(null) }
+    var playerViewInstance by remember { mutableStateOf<PlayerView?>(null) }
 
     val player = remember(streamUrl, forceHls, retryCount) {
         ExoPlayer.Builder(context).build().apply {
@@ -80,6 +104,41 @@ private fun Media3CameraStreamPlayer(
             setMediaItem(mediaItem)
             playWhenReady = true
             prepare()
+        }
+    }
+
+    DisposableEffect(controller, playerViewInstance) {
+        if (controller != null && playerViewInstance != null) {
+            controller.captureFrameCallback = { onCaptured ->
+                val pView = playerViewInstance
+                val surfaceView = pView?.videoSurfaceView as? SurfaceView
+                val textureView = pView?.videoSurfaceView as? TextureView
+
+                if (textureView != null) {
+                    onCaptured(textureView.bitmap)
+                } else if (surfaceView != null && surfaceView.holder.surface.isValid && surfaceView.width > 0 && surfaceView.height > 0) {
+                    val bitmap = Bitmap.createBitmap(surfaceView.width, surfaceView.height, Bitmap.Config.ARGB_8888)
+                    PixelCopy.request(
+                        surfaceView,
+                        bitmap,
+                        { res ->
+                            if (res == PixelCopy.SUCCESS) {
+                                onCaptured(bitmap)
+                            } else {
+                                onCaptured(null)
+                            }
+                        },
+                        Handler(Looper.getMainLooper())
+                    )
+                } else {
+                    onCaptured(null)
+                }
+            }
+        }
+        onDispose {
+            if (controller?.captureFrameCallback != null) {
+                controller.captureFrameCallback = null
+            }
         }
     }
 
@@ -118,15 +177,19 @@ private fun Media3CameraStreamPlayer(
     Box(modifier = modifier.background(Color.Black), contentAlignment = Alignment.Center) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { context ->
-                PlayerView(context).apply {
+            factory = { ctx ->
+                PlayerView(ctx).apply {
                     useController = false
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     keepScreenOn = true
                     this.player = player
+                    playerViewInstance = this
                 }
             },
-            update = { it.player = player }
+            update = {
+                it.player = player
+                playerViewInstance = it
+            }
         )
 
         if (isBuffering && !hasError) {

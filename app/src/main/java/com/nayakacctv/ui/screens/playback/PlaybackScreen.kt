@@ -15,9 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.nayakacctv.data.model.Recording
 import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.components.NayakaTopAppBar
@@ -102,16 +104,29 @@ fun RecordingCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(60.dp, 48.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(PrimaryBlue.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
+                if (!recording.thumbnailUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = recording.thumbnailUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.25f))
+                    )
+                }
                 Icon(
                     imageVector = Icons.Default.PlayCircle,
                     contentDescription = null,
-                    tint = PrimaryBlue,
-                    modifier = Modifier.size(32.dp)
+                    tint = if (!recording.thumbnailUrl.isNullOrBlank()) Color.White else PrimaryBlue,
+                    modifier = Modifier.size(28.dp)
                 )
             }
 

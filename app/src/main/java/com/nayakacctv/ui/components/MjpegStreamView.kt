@@ -39,12 +39,26 @@ import java.util.concurrent.TimeUnit
 fun MjpegStreamView(
     streamUrl: String,
     modifier: Modifier = Modifier,
+    controller: CameraStreamController? = null,
     onStateChange: (String) -> Unit = {}
 ) {
     var currentBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var retryTrigger by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(controller, currentBitmap) {
+        if (controller != null) {
+            controller.captureFrameCallback = { onCaptured ->
+                onCaptured(currentBitmap)
+            }
+        }
+        onDispose {
+            if (controller?.captureFrameCallback != null) {
+                controller.captureFrameCallback = null
+            }
+        }
+    }
 
     // Mapping URL stream aman. Jika URL adalah internal RTSP (misal rtsp://10.10...) atau kosong,
     // fallback otomatis ke gateway stream live CCTV publik http://110.232.92.134:3001/api/stream

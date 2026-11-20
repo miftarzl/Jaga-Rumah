@@ -7,6 +7,7 @@ import androidx.security.crypto.MasterKey
 import com.google.gson.Gson
 import com.nayakacctv.data.model.Customer
 import com.nayakacctv.data.model.CustomerCameraEdit
+import com.nayakacctv.data.model.Recording
 import java.util.UUID
 
 class TokenManager(context: Context) {
@@ -186,6 +187,29 @@ class TokenManager(context: Context) {
         val current = getDeletedCameraIds().toMutableSet()
         current.remove(cameraId)
         prefs.edit().putStringSet("deleted_camera_ids", current).apply()
+    }
+
+    fun getLocalRecordings(): List<Recording> {
+        val json = prefs.getString("local_recordings", null) ?: return emptyList()
+        return try {
+            val type = object : com.google.gson.reflect.TypeToken<List<Recording>>() {}.type
+            gson.fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveLocalRecording(recording: Recording) {
+        val current = getLocalRecordings().toMutableList()
+        current.removeAll { it.id == recording.id }
+        current.add(0, recording)
+        prefs.edit().putString("local_recordings", gson.toJson(current)).apply()
+    }
+
+    fun deleteLocalRecording(id: String) {
+        val current = getLocalRecordings().toMutableList()
+        current.removeAll { it.id == id }
+        prefs.edit().putString("local_recordings", gson.toJson(current)).apply()
     }
 
     fun clearSession(preserveBiometric: Boolean = true) {

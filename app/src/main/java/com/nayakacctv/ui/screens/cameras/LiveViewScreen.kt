@@ -23,12 +23,15 @@ import androidx.compose.ui.unit.sp
 import com.nayakacctv.data.model.Camera
 import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.components.CameraStreamPlayer
+import com.nayakacctv.ui.components.rememberCameraStreamController
 import com.nayakacctv.ui.components.NayakaTopAppBar
 import com.nayakacctv.ui.components.StatusBadge
 import com.nayakacctv.ui.theme.*
+import com.nayakacctv.ui.utils.StreamRecorder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun LiveViewScreen(
@@ -47,10 +50,23 @@ fun LiveViewScreen(
     var allCameras by remember { mutableStateOf<List<Camera>>(emptyList()) }
     var showCameraSwitcher by remember { mutableStateOf(false) }
 
+    val streamController = rememberCameraStreamController()
     var isMuted by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
+    var isSavingRecording by remember { mutableStateOf(false) }
     var recordElapsedSeconds by remember { mutableLongStateOf(0L) }
     var streamStatus by remember { mutableStateOf("Menghubungkan...") }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            if (StreamRecorder.isRecording) {
+                coroutineScope.launch {
+                    val res = StreamRecorder.stopRecording(context)
+                    res.getOrNull()?.let { repository.saveLocalRecording(it) }
+                }
+            }
+        }
+    }
 
     // Ambil detail dan URL playback yang dibuat backend untuk kamera aktif.
     LaunchedEffect(activeCameraId) {
@@ -159,16 +175,17 @@ fun LiveViewScreen(
                         CameraStreamPlayer(
                             streamUrl = currentStreamUrl,
                             forceHls = false,
+                            controller = streamController,
                             modifier = Modifier.fillMaxSize(),
                             onStateChange = { state ->
                                 streamStatus = when (state) {
                                     "playing" -> "LIVE HD"
                                     "connecting" -> "Menghubungkan..."
                                     else -> "Koneksi Terputus"
+                                }
                             }
-                        }
-                    )
-                } else if (streamError != null) {
+                        )
+                    } else if (streamError != null) {
                     Text(
                         text = streamError ?: "URL stream kamera tidak tersedia",
                         modifier = Modifier.align(Alignment.Center).padding(24.dp),
@@ -269,20 +286,67 @@ fun LiveViewScreen(
                         icon = Icons.Default.CameraAlt,
                         label = "Foto (Snapshot)",
                         onClick = {
-                            Toast.makeText(context, "Tangkapan layar frame berhasil disimpan ke galeri!", Toast.LENGTH_SHORT).show()
+                            streamController.captureFrame { bitmap ->
+                                if (bitmap != null) {
+                                    val res = StreamRecorder.saveSnapshotToGallery(context, bitmap)
+                                    if (res.isSuccess) {
+                                        Toast.makeText(context, "Foto snapshot berhasil disimpan ke Galeri (Pictures/NayakaCCTV)!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Gagal menyimpan foto: ${res.exceptionOrNull()?.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Menunggu siaran video tampil untuk mengambil snapshot...", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     )
                     ActionButton(
                         icon = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-                        label = if (isRecording) "Berhenti" else "Rekam",
+                        label = if (isSavingRecording) "Menyimpan..." else if (isRecording) "Berhenti" else "Rekam",
                         iconColor = if (isRecording) StatusDanger else PrimaryBlue,
                         onClick = {
-                            isRecording = !isRecording
-                            Toast.makeText(
-                                context,
-                                if (isRecording) "Merekam siaran langsung CCTV..." else "Rekaman video berhasil disimpan",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            val activeUrl = streamUrl
+                            if (!isRecording) {
+                                if (activeUrl.isNullOrBlank()) {
+                                    Toast.makeText(context, "URL live stream belum siap untuk direkam", Toast.LENGTH_SHORT).show()
+                                    return@ActionButton
+                                }
+                                isRecording = true
+                                recordElapsedSeconds = 0L
+                                StreamRecorder.startRecording(
+                                    context = context,
+                                    streamUrl = activeUrl,
+                                    cameraId = activeCameraId,
+                                    cameraName = cam?.name ?: "Kamera CCTV",
+                                    scope = coroutineScope
+                                )
+                                Toast.makeText(context, "Mulai merekam siaran langsung CCTV...", Toast.LENGTH_SHORT).show()
+                            } else {
+                                if (isSavingRecording) return@ActionButton
+                                isSavingRecording = true
+                                isRecording = false
+
+                                streamController.captureFrame { lastFrame ->
+                                    coroutineScope.launch {
+                                        val result = StreamRecorder.stopRecording(context, lastFrame)
+                                        isSavingRecording = false
+                                        result.onSuccess { rec ->
+                                            repository.saveLocalRecording(rec)
+                                            Toast.makeText(
+                                                context,
+                                                "Rekaman video berhasil disimpan di Galeri (Movies/NayakaCCTV) & arsip Playback!",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }.onFailure { err ->
+                                            Toast.makeText(
+                                                context,
+                                                "Gagal menyimpan rekaman: ${err.localizedMessage ?: "Terjadi kesalahan"}",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                }
+                            }
                         }
                     )
                     ActionButton(
