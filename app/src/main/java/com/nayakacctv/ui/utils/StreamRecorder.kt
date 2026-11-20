@@ -16,6 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -119,6 +120,7 @@ object StreamRecorder {
 
         var initDownloaded = false
         val downloadedSegments = mutableSetOf<String>()
+        var isFirstPoll = true
 
         while (isActive && isRecording) {
             try {
@@ -128,7 +130,7 @@ object StreamRecorder {
                         val playlistBody = resp.body?.string() ?: ""
                         val lines = playlistBody.lines().map { it.trim() }.filter { it.isNotBlank() }
 
-                        // Periksa apakah ini fMP4 (fragmented MP4) dengan EXT-X-MAP
+                        // 1. Download init fMP4
                         if (!initDownloaded) {
                             for (line in lines) {
                                 if (line.contains("EXT-X-MAP:URI=")) {
@@ -146,17 +148,34 @@ object StreamRecorder {
                             }
                         }
 
-                        // Unduh segmen-segmen video (.mp4 atau .ts)
-                        for (line in lines) {
-                            if (!line.startsWith("#")) {
-                                val segKey = line.substringBefore('?').substringAfterLast('/')
-                                if (!downloadedSegments.contains(segKey)) {
-                                    val segUrl = resolveUrl(baseDir, line)
-                                    val ok = downloadAndAppend(segUrl)
-                                    if (ok) {
-                                        downloadedSegments.add(segKey)
-                                        Log.i(TAG, "Downloaded segment: $segKey")
-                                    }
+                        // Filter semua baris segmen video (.mp4 atau .ts)
+                        val segmentLines = lines.filter { !it.startsWith("#") }
+
+                        // Pada poll pertama saat mulai rekam:
+                        // Tandai semua segmen historis lama di buffer playlist sebagai "sudah terunduh"
+                        // kecuali paling banyak 1 segmen live paling terakhir yang sedang berjalan
+                        // Hal ini mencegah rekaman membengkak durasinya dan mencegah freeze pada segmen lama
+                        if (isFirstPoll) {
+                            isFirstPoll = false
+                            if (segmentLines.size > 1) {
+                                val oldHistorySegments = segmentLines.dropLast(1)
+                                for (oldSeg in oldHistorySegments) {
+                                    val oldKey = oldSeg.substringBefore('?').substringAfterLast('/')
+                                    downloadedSegments.add(oldKey)
+                                }
+                                Log.i(TAG, "Skipped ${oldHistorySegments.size} historical buffer segments from past")
+                            }
+                        }
+
+                        // Unduh hanya segmen aktif saat rekaman berjalan
+                        for (line in segmentLines) {
+                            val segKey = line.substringBefore('?').substringAfterLast('/')
+                            if (!downloadedSegments.contains(segKey)) {
+                                val segUrl = resolveUrl(baseDir, line)
+                                val ok = downloadAndAppend(segUrl)
+                                if (ok) {
+                                    downloadedSegments.add(segKey)
+                                    Log.i(TAG, "Downloaded fresh segment: $segKey")
                                 }
                             }
                         }
@@ -166,7 +185,7 @@ object StreamRecorder {
                 Log.w(TAG, "Segment poll error: ${e.message}")
             }
 
-            delay(1200)
+            delay(1000)
         }
     }
 
@@ -272,7 +291,10 @@ object StreamRecorder {
             return@withContext Result.failure(Exception("Hasil rekaman kosong atau durasi terlalu singkat."))
         }
 
-        val durationSec = ((System.currentTimeMillis() - recordingStartTime) / 1000L).coerceAtLeast(1L)
+        // 0. Normalkan decode timestamp pada kotak tfdt fMP4 agar video mulai di detik 0.000 (menghilangkan freeze dan sync durasi)
+        val fmp4DurationSec = normalizeFmp4Timestamps(currentTemp)
+
+        val elapsedSec = ((System.currentTimeMillis() - recordingStartTime) / 1000L).coerceAtLeast(1L)
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "NAYAKA_REC_${timeStamp}.mp4"
 
@@ -283,13 +305,31 @@ object StreamRecorder {
             val persistentFile = File(extMoviesDir, fileName)
             currentTemp.copyTo(persistentFile, overwrite = true)
 
-            // 2. Simpan ke Public MediaStore (Movies/NayakaCCTV) agar muncul di Galeri & Album HP
+            // 2. Ambil durasi aktual langsung dari berkas video menggunakan MediaMetadataRetriever
+            val retriever = MediaMetadataRetriever()
+            val actualDurMs = try {
+                retriever.setDataSource(persistentFile.absolutePath)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+            } catch (_: Exception) {
+                null
+            } finally {
+                try { retriever.release() } catch (_: Exception) {}
+            }
+            val durationSec = if (actualDurMs != null && actualDurMs > 0) {
+                (actualDurMs / 1000L).coerceAtLeast(1L)
+            } else if (fmp4DurationSec != null && fmp4DurationSec > 0) {
+                fmp4DurationSec
+            } else {
+                elapsedSec
+            }
+
+            // 3. Simpan ke Public MediaStore (Movies/NayakaCCTV) agar muncul di Galeri & Album HP
             val mediaStoreUri = saveVideoToMediaStore(context, currentTemp, fileName)
 
-            // 3. Simpan thumbnail rekaman
+            // 4. Simpan thumbnail rekaman
             val thumbFile = saveRecordingThumbnail(context, persistentFile, frameBitmap, timeStamp)
 
-            // 4. Bangun metadata Recording untuk Playback
+            // 5. Bangun metadata Recording untuk Playback
             val isoDateFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
                 timeZone = TimeZone.getTimeZone("UTC")
             }
@@ -455,5 +495,88 @@ object StreamRecorder {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Menormalkan baseMediaDecodeTime pada kotak 'tfdt' fMP4
+     * agar video dimulai tepat di detik 0.000 (menghilangkan freeze/delay 10 detik di awal)
+     * dan durasi video sesuai dengan panjang rekaman sebenarnya.
+     */
+    private fun normalizeFmp4Timestamps(file: File): Long? {
+        if (!file.exists() || file.length() < 16) return null
+
+        var initialTime: Long? = null
+        var lastTime: Long = 0L
+
+        try {
+            RandomAccessFile(file, "rw").use { raf ->
+                val buffer = ByteArray(8192)
+                var filePos = 0L
+                val fileLen = raf.length()
+
+                while (filePos < fileLen - 16) {
+                    raf.seek(filePos)
+                    val readLen = raf.read(buffer)
+                    if (readLen < 8) break
+
+                    var idx = 0
+                    while (idx < readLen - 12) {
+                        // Cari signature 't', 'f', 'd', 't' (0x74, 0x66, 0x64, 0x74)
+                        if (buffer[idx] == 0x74.toByte() &&
+                            buffer[idx + 1] == 0x66.toByte() &&
+                            buffer[idx + 2] == 0x64.toByte() &&
+                            buffer[idx + 3] == 0x74.toByte()
+                        ) {
+                            val tfdtOffset = filePos + idx
+                            val version = buffer[idx + 4].toInt() and 0xFF
+
+                            if (version == 1 && idx + 16 <= readLen) {
+                                // 8-byte uint64 baseMediaDecodeTime
+                                val timeOffset = tfdtOffset + 8
+                                raf.seek(timeOffset)
+                                val origTime = raf.readLong()
+
+                                if (initialTime == null) {
+                                    initialTime = origTime
+                                }
+                                val newTime = (origTime - initialTime!!).coerceAtLeast(0L)
+                                lastTime = newTime
+
+                                raf.seek(timeOffset)
+                                raf.writeLong(newTime)
+                                Log.i(TAG, "Normalized tfdt v1 at $timeOffset: $origTime -> $newTime")
+                            } else if (version == 0 && idx + 12 <= readLen) {
+                                // 4-byte uint32 baseMediaDecodeTime
+                                val timeOffset = tfdtOffset + 8
+                                raf.seek(timeOffset)
+                                val origTime = raf.readInt().toLong() and 0xFFFFFFFFL
+
+                                if (initialTime == null) {
+                                    initialTime = origTime
+                                }
+                                val newTime = (origTime - initialTime!!).coerceAtLeast(0L)
+                                lastTime = newTime
+
+                                raf.seek(timeOffset)
+                                raf.writeInt(newTime.toInt())
+                                Log.i(TAG, "Normalized tfdt v0 at $timeOffset: $origTime -> $newTime")
+                            }
+                            idx += 12
+                        } else {
+                            idx++
+                        }
+                    }
+                    filePos += (readLen - 16).coerceAtLeast(1)
+                }
+            }
+            if (initialTime != null) {
+                // Timescale video standar MediaMTX/H.264 adalah 90,000 Hz
+                val durSec = (lastTime / 90000L) + 2L
+                return durSec.coerceAtLeast(1L)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to normalize fmp4 tfdt timestamps: ${e.message}")
+        }
+        return null
     }
 }

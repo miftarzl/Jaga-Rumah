@@ -97,13 +97,21 @@ fun PlaybackDetailScreen(
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
-                    val dur = player.duration
-                    if (dur > 0) {
-                        totalDuration = dur / 1000
-                    }
-                } else if (playbackState == Player.STATE_ENDED) {
+                val dur = player.duration
+                if (dur > 0 && dur != androidx.media3.common.C.TIME_UNSET) {
+                    val sec = dur / 1000
+                    if (sec > 0) totalDuration = sec
+                }
+                if (playbackState == Player.STATE_ENDED) {
                     isPlaying = false
+                }
+            }
+
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                val dur = player.duration
+                if (dur > 0 && dur != androidx.media3.common.C.TIME_UNSET) {
+                    val sec = dur / 1000
+                    if (sec > 0) totalDuration = sec
                 }
             }
         }
@@ -115,15 +123,22 @@ fun PlaybackDetailScreen(
         }
     }
 
-    // Update position sync
+    // Update position sync & durasi dinamis
     LaunchedEffect(exoPlayer, isPlaying, isScrubbing) {
         val player = exoPlayer
         if (player != null && !isScrubbing) {
             while (true) {
-                if (player.isPlaying) {
-                    currentSeconds = player.currentPosition / 1000
+                val dur = player.duration
+                if (dur > 0 && dur != androidx.media3.common.C.TIME_UNSET) {
+                    val sec = dur / 1000
+                    if (sec > 0 && sec != totalDuration) {
+                        totalDuration = sec
+                    }
                 }
-                delay(500)
+                if (player.isPlaying) {
+                    currentSeconds = (player.currentPosition / 1000).coerceAtMost(totalDuration.coerceAtLeast(1L))
+                }
+                delay(250)
             }
         }
     }
