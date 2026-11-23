@@ -81,6 +81,17 @@ Content-Type: application/json
 - `speed` *(opsional, default `0.5`)*: `0.1` s/d `1.0`.
 - `duration_ms` *(opsional, default `400`)*: durasi gerak dalam milidetik sebelum server otomatis mengirim `stop` (`0` = gerak terus sampai client mengirim `direction: "stop"`).
 
+### E. Audio 2 Arah / Speaker Kamera — Push-to-Talk (Endpoint Baru)
+Gunakan endpoint ini untuk mengirim suara dari mic HP ke speaker kamera Tapo C500:
+```http
+POST /api/v1/mobile/cameras/{camera_id}/talk
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data
+
+audio=@rekaman_mic.m4a (atau .wav / .aac, maksimal 5 MB)
+```
+- Backend otomatis mengonversi audio ke format G.711 (8kHz mono) dan memutarnya di speaker kamera lewat worker `pytapo`.
+
 ---
 
 ## 3. Perubahan yang Masih Perlu Dilakukan di Android
@@ -103,9 +114,13 @@ Content-Type: application/json
   - Panggil `GET /api/v1/mobile/cameras/{camera_id}/clip?from=...&to=...&download=1` dengan header `Authorization: Bearer <token>`, lalu simpan ke Galeri HP (`MediaStore.Video`, mirip alur simpan yang sudah ada di project).
 - Periksa juga aksi **Share / Unduh** di `PlaybackDetailScreen.kt` agar untuk rekaman dari server (`playbackUrl` diawali `http://` atau `https://`), file diunduh dulu via HTTP (atau tambahkan `?download=1`) sebelum dibagikan lewat `FileProvider`.
 
-### 4. Kontrol PTZ di `LiveViewScreen.kt`
-- Sudah terhubung ke `POST /mobile/cameras/{camera_id}/ptz` dengan autentikasi sesi.
-- Tombol arah dan zoom mengirim `direction`, `speed: 0.5`, dan `duration_ms: 400`; error dari backend ditampilkan di panel PTZ.
+### 4. PTZ & Audio 2 Arah di `LiveViewScreen.kt` — Sudah Diimplementasikan
+- **PTZ**: Tombol arah mengirim gerak singkat 400 ms. Joystick di tengah memakai `duration_ms: 0`, menyesuaikan kecepatan dari jarak geser, dan mengirim `direction: "stop"` saat dilepas.
+- **Batas arah joystick**: Kontrak endpoint saat ini hanya menerima `up`, `down`, `left`, dan `right`; joystick memilih arah terdekat dari empat arah tersebut. Sudut diagonal bebas memerlukan dukungan vektor pan/tilt di backend.
+- **Stream saat PTZ**: Pemutar mencoba menyambungkan ulang secara otomatis jika stream kamera terputus sesaat selama kamera bergerak.
+- **Audio Kamera → HP**: Tombol mute mengatur volume ExoPlayer.
+- **Audio HP → Speaker Kamera**: Tombol push-to-talk meminta izin mikrofon, merekam `.m4a` ketika ditekan, lalu mengunggah field `audio` ke endpoint `/api/v1/mobile/cameras/{camera_id}/talk` saat dilepas. Audio live kamera dimute selama proses rekam dan unggah.
+- File harus berukuran maksimal 5 MB. Backend mengonversi audio ke G.711 (8 kHz mono) dan memutarnya lewat worker `pytapo`; pemutaran fisik tetap bergantung pada worker dan konfigurasi kamera di backend.
 
 ### 5. Shortcut dari `LiveViewScreen.kt` & Penanganan Retensi 24 Jam
 - *(Opsional)* Tambahkan tombol **"Riwayat Rekaman"** di `LiveViewScreen.kt` yang langsung membuka `PlaybackScreen` terfilter untuk kamera tersebut.

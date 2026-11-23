@@ -30,6 +30,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.nayakacctv.ui.theme.PrimaryBlue
+import kotlinx.coroutines.delay
+
+private const val MAX_AUTOMATIC_RETRIES = 3
 
 class CameraStreamController {
     var captureFrameCallback: ((onCaptured: (Bitmap?) -> Unit) -> Unit)? = null
@@ -52,6 +55,7 @@ fun CameraStreamPlayer(
     streamUrl: String,
     modifier: Modifier = Modifier,
     forceHls: Boolean = false,
+    isMuted: Boolean = false,
     controller: CameraStreamController? = null,
     onStateChange: (String) -> Unit = {}
 ) {
@@ -63,6 +67,7 @@ fun CameraStreamPlayer(
         Media3CameraStreamPlayer(
             streamUrl = streamUrl,
             forceHls = isHls,
+            isMuted = isMuted,
             modifier = modifier,
             controller = controller,
             onStateChange = onStateChange
@@ -81,6 +86,7 @@ fun CameraStreamPlayer(
 private fun Media3CameraStreamPlayer(
     streamUrl: String,
     forceHls: Boolean,
+    isMuted: Boolean,
     modifier: Modifier,
     controller: CameraStreamController? = null,
     onStateChange: (String) -> Unit
@@ -88,9 +94,11 @@ private fun Media3CameraStreamPlayer(
     val context = LocalContext.current
     val currentOnStateChange by rememberUpdatedState(onStateChange)
     var retryCount by remember(streamUrl) { mutableIntStateOf(0) }
-    var hasError by remember(streamUrl) { mutableStateOf(false) }
-    var isBuffering by remember(streamUrl) { mutableStateOf(true) }
-    var errorMessage by remember(streamUrl) { mutableStateOf<String?>(null) }
+    var automaticRetryAttempts by remember(streamUrl) { mutableIntStateOf(0) }
+    var retryTrigger by remember(streamUrl) { mutableIntStateOf(0) }
+    var hasError by remember(streamUrl, retryCount) { mutableStateOf(false) }
+    var isBuffering by remember(streamUrl, retryCount) { mutableStateOf(true) }
+    var errorMessage by remember(streamUrl, retryCount) { mutableStateOf<String?>(null) }
     var playerViewInstance by remember { mutableStateOf<PlayerView?>(null) }
 
     val player = remember(streamUrl, forceHls, retryCount) {
@@ -104,6 +112,17 @@ private fun Media3CameraStreamPlayer(
             setMediaItem(mediaItem)
             playWhenReady = true
             prepare()
+        }
+    }
+
+    LaunchedEffect(player, isMuted) {
+        player.volume = if (isMuted) 0f else 1f
+    }
+
+    LaunchedEffect(retryTrigger) {
+        if (retryTrigger > 0) {
+            delay((retryTrigger * 1_000L).coerceAtMost(4_000L))
+            retryCount++
         }
     }
 
@@ -148,6 +167,8 @@ private fun Media3CameraStreamPlayer(
                 if (playbackState == Player.STATE_READY) {
                     hasError = false
                     isBuffering = false
+                    automaticRetryAttempts = 0
+                    retryTrigger = 0
                     currentOnStateChange("playing")
                 } else if (playbackState == Player.STATE_BUFFERING) {
                     isBuffering = true
@@ -156,13 +177,22 @@ private fun Media3CameraStreamPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                hasError = true
-                isBuffering = false
                 val err = error.cause?.localizedMessage
                     ?: "${error.errorCodeName}: ${error.localizedMessage ?: "Gagal memuat stream"}"
-                errorMessage = err
                 Log.e("NAYAKA_STREAM", "ExoPlayer error on $streamUrl: $err", error)
-                currentOnStateChange("error")
+                if (automaticRetryAttempts < MAX_AUTOMATIC_RETRIES) {
+                    automaticRetryAttempts++
+                    isBuffering = true
+                    hasError = false
+                    errorMessage = err
+                    retryTrigger = automaticRetryAttempts
+                    currentOnStateChange("reconnecting")
+                } else {
+                    hasError = true
+                    isBuffering = false
+                    errorMessage = err
+                    currentOnStateChange("error")
+                }
             }
         }
         player.addListener(listener)
@@ -193,7 +223,17 @@ private fun Media3CameraStreamPlayer(
         )
 
         if (isBuffering && !hasError) {
-            CircularProgressIndicator(color = PrimaryBlue)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = PrimaryBlue)
+                if (automaticRetryAttempts > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Menyambungkan kembali...",
+                        color = Color.White,
+                        fontSize = 12.sp
+                    )
+                }
+            }
         }
 
         if (hasError) {
@@ -219,10 +259,15 @@ private fun Media3CameraStreamPlayer(
                     lineHeight = 14.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = { retryCount++ }) {
+                Button(onClick = {
+                    automaticRetryAttempts = 0
+                    retryTrigger = 0
+                    retryCount++
+                }) {
                     Text("Coba lagi")
                 }
             }
         }
+
     }
 }

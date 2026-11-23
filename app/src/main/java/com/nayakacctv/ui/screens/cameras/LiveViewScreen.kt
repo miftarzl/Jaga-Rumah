@@ -3,8 +3,11 @@ package com.nayakacctv.ui.screens.cameras
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,8 +22,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,11 +47,16 @@ import com.nayakacctv.ui.components.rememberCameraStreamController
 import com.nayakacctv.ui.components.NayakaTopAppBar
 import com.nayakacctv.ui.components.StatusBadge
 import com.nayakacctv.ui.theme.*
-import com.nayakacctv.ui.utils.MicrophoneCapture
+import com.nayakacctv.ui.utils.CameraTalkRecorder
 import com.nayakacctv.ui.utils.StreamRecorder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import java.util.Locale
 
 @Composable
@@ -71,64 +88,108 @@ fun LiveViewScreen(
                 PackageManager.PERMISSION_GRANTED
         )
     }
-    var isMicrophoneCapturing by remember { mutableStateOf(false) }
-    var microphoneLevel by remember { mutableFloatStateOf(0f) }
-    var microphoneError by remember { mutableStateOf<String?>(null) }
-    var isPtzLoading by remember { mutableStateOf(false) }
+    var isTalkRecording by remember { mutableStateOf(false) }
+    var isTalkUploading by remember { mutableStateOf(false) }
+    var talkError by remember { mutableStateOf<String?>(null) }
+    var talkStatus by remember { mutableStateOf<String?>(null) }
+    var talkCameraId by remember { mutableStateOf<String?>(null) }
+    var mutedBeforeTalk by remember { mutableStateOf(false) }
+    var pendingPtzRequests by remember { mutableIntStateOf(0) }
     var ptzError by remember { mutableStateOf<String?>(null) }
     var ptzStatus by remember { mutableStateOf<String?>(null) }
-    val microphoneCapture = remember { MicrophoneCapture() }
+    val isPtzLoading = pendingPtzRequests > 0
+    val cameraTalkRecorder = remember { CameraTalkRecorder() }
+    val ptzRequestMutex = remember { Mutex() }
     val microphonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasMicrophonePermission = granted
-        microphoneError = if (granted) null else "Izin mikrofon ditolak."
+        talkError = if (granted) null else "Izin mikrofon ditolak."
     }
 
-    fun toggleMicrophoneCapture() {
-        if (isMicrophoneCapturing) {
-            microphoneCapture.stop()
-            isMicrophoneCapturing = false
-            microphoneLevel = 0f
-        } else if (!hasMicrophonePermission) {
+    fun startCameraTalk(): Boolean {
+        if (isTalkRecording || isTalkUploading) return false
+        if (!hasMicrophonePermission) {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        } else {
-            microphoneError = null
-            isMicrophoneCapturing = microphoneCapture.start(
-                scope = coroutineScope,
-                onLevelChanged = { microphoneLevel = it },
-                onError = {
-                    microphoneError = it
-                    isMicrophoneCapturing = false
-                    microphoneLevel = 0f
-                    microphoneCapture.stop()
-                }
-            )
+            return false
+        }
+
+        talkError = null
+        talkStatus = null
+        val result = cameraTalkRecorder.start(context)
+        result.onSuccess {
+            talkCameraId = activeCameraId
+            mutedBeforeTalk = isMuted
+            isMuted = true
+            isTalkRecording = true
+        }.onFailure {
+            talkError = it.localizedMessage ?: "Gagal memulai rekaman suara."
+        }
+        return result.isSuccess
+    }
+
+    fun finishCameraTalk() {
+        if (!isTalkRecording) return
+        isTalkRecording = false
+        val targetCameraId = talkCameraId ?: activeCameraId
+        talkCameraId = null
+        val recordingResult = cameraTalkRecorder.stop()
+        val audioFile = recordingResult.getOrNull()
+        if (audioFile == null) {
+            talkError = recordingResult.exceptionOrNull()?.localizedMessage
+                ?: "Gagal menyelesaikan rekaman suara."
+            isMuted = mutedBeforeTalk
+            return
+        }
+
+        isTalkUploading = true
+        coroutineScope.launch {
+            try {
+                repository.sendCameraTalk(targetCameraId, audioFile)
+                    .onSuccess { talkStatus = it.take(300) }
+                    .onFailure { talkError = it.localizedMessage ?: "Gagal mengirim audio ke kamera." }
+            } finally {
+                audioFile.delete()
+                isTalkUploading = false
+                isMuted = mutedBeforeTalk
+            }
         }
     }
 
-    fun sendPtzCommand(direction: PtzDirection) {
-        if (isPtzLoading) return
-        isPtzLoading = true
+    fun sendPtzCommand(
+        direction: PtzDirection,
+        speed: Float = 0.5f,
+        durationMs: Int = 400
+    ) {
+        pendingPtzRequests++
         ptzError = null
         ptzStatus = null
         val targetCameraId = activeCameraId
         coroutineScope.launch {
-            repository.controlCameraPtz(targetCameraId, direction)
-                .onSuccess { ptzStatus = it.take(300) }
-                .onFailure { ptzError = it.localizedMessage ?: "Gagal mengontrol kamera." }
-            isPtzLoading = false
+            try {
+                ptzRequestMutex.withLock {
+                    repository.controlCameraPtz(targetCameraId, direction, speed, durationMs)
+                        .onSuccess { ptzStatus = it.take(300) }
+                        .onFailure { ptzError = it.localizedMessage ?: "Gagal mengontrol kamera." }
+                }
+            } finally {
+                pendingPtzRequests = (pendingPtzRequests - 1).coerceAtLeast(0)
+            }
         }
     }
 
-    DisposableEffect(microphoneCapture) {
-        onDispose { microphoneCapture.stop() }
+    DisposableEffect(cameraTalkRecorder) {
+        onDispose { cameraTalkRecorder.cancel() }
     }
 
     LaunchedEffect(activeCameraId) {
-        microphoneCapture.stop()
-        isMicrophoneCapturing = false
-        microphoneLevel = 0f
+        if (isTalkRecording) {
+            cameraTalkRecorder.cancel()
+            isTalkRecording = false
+            talkCameraId = null
+            isMuted = mutedBeforeTalk
+            talkError = "Rekaman dihentikan karena kamera diganti."
+        }
     }
 
     DisposableEffect(Unit) {
@@ -210,7 +271,7 @@ fun LiveViewScreen(
                     IconButton(onClick = {
                         isMuted = !isMuted
                         Toast.makeText(context, if (isMuted) "Audio dimatikan" else "Audio diaktifkan", Toast.LENGTH_SHORT).show()
-                    }) {
+                    }, enabled = !isTalkRecording && !isTalkUploading) {
                         Icon(
                             imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                             contentDescription = "Mute/Unmute",
@@ -249,12 +310,14 @@ fun LiveViewScreen(
                         CameraStreamPlayer(
                             streamUrl = currentStreamUrl,
                             forceHls = false,
+                    isMuted = isMuted,
                             controller = streamController,
                             modifier = Modifier.fillMaxSize(),
                             onStateChange = { state ->
                                 streamStatus = when (state) {
                                     "playing" -> "LIVE HD"
                                     "connecting" -> "Menghubungkan..."
+                            "reconnecting" -> "Menyambungkan kembali..."
                                     else -> "Koneksi Terputus"
                                 }
                             }
@@ -434,19 +497,30 @@ fun LiveViewScreen(
                     )
                 }
 
-                MicrophoneTalkPanel(
+                CameraTalkPanel(
                     hasPermission = hasMicrophonePermission,
-                    isCapturing = isMicrophoneCapturing,
-                    audioLevel = microphoneLevel,
-                    errorMessage = microphoneError,
-                    onToggleCapture = ::toggleMicrophoneCapture
+                    isRecording = isTalkRecording,
+                    isUploading = isTalkUploading,
+                    errorMessage = talkError,
+                    statusMessage = talkStatus,
+                    onRequestPermission = {
+                        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    onStart = ::startCameraTalk,
+                    onFinish = ::finishCameraTalk
                 )
 
                 PtzControlPanel(
                     isLoading = isPtzLoading,
                     errorMessage = ptzError,
                     statusMessage = ptzStatus,
-                    onDirection = ::sendPtzCommand
+                    onDirection = { direction -> sendPtzCommand(direction) },
+                    onJoystickMove = { direction, speed ->
+                        sendPtzCommand(direction, speed = speed, durationMs = 0)
+                    },
+                    onJoystickStop = {
+                        sendPtzCommand(PtzDirection.STOP, durationMs = 0)
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -523,7 +597,9 @@ private fun PtzControlPanel(
     isLoading: Boolean,
     errorMessage: String?,
     statusMessage: String?,
-    onDirection: (PtzDirection) -> Unit
+    onDirection: (PtzDirection) -> Unit,
+    onJoystickMove: (PtzDirection, Float) -> Unit,
+    onJoystickStop: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -543,7 +619,7 @@ private fun PtzControlPanel(
                 color = TextPrimary
             )
             Text(
-                text = "Setiap tombol menggerakkan kamera selama 400 ms.",
+                text = "Geser controller untuk mengatur arah dan kecepatan; lepas untuk berhenti.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextMuted
             )
@@ -565,23 +641,11 @@ private fun PtzControlPanel(
                     enabled = !isLoading,
                     onClick = { onDirection(PtzDirection.LEFT) }
                 )
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryBlue.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = PrimaryBlue,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Default.ControlCamera, contentDescription = null, tint = PrimaryBlue)
-                    }
-                }
+                PtzJoystickControl(
+                    isLoading = isLoading,
+                    onMove = onJoystickMove,
+                    onStop = onJoystickStop
+                )
                 PtzControlButton(
                     icon = Icons.Default.KeyboardArrowRight,
                     description = "Kanan",
@@ -633,6 +697,121 @@ private fun PtzControlPanel(
     }
 }
 
+private data class JoystickCommand(
+    val direction: PtzDirection,
+    val speed: Float
+)
+
+@Composable
+private fun PtzJoystickControl(
+    isLoading: Boolean,
+    onMove: (PtzDirection, Float) -> Unit,
+    onStop: () -> Unit
+) {
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    val knobSizePx = with(LocalDensity.current) { 38.dp.toPx() }
+    val currentOnMove by rememberUpdatedState(onMove)
+    val currentOnStop by rememberUpdatedState(onStop)
+
+    Box(
+        modifier = Modifier
+            .size(92.dp)
+            .clip(CircleShape)
+            .background(Color(0xFFE2E8F0))
+            .border(1.dp, BorderSubtle, CircleShape)
+            .pointerInput(knobSizePx) {
+                var lastSentCommand: JoystickCommand? = null
+
+                fun updateJoystick(vector: Offset) {
+                    val maxTravel = (minOf(size.width, size.height).toFloat() - knobSizePx) / 2f
+                    val distance = sqrt(vector.x * vector.x + vector.y * vector.y)
+                    if (distance <= maxTravel * 0.16f) {
+                        dragOffset = Offset.Zero
+                        if (lastSentCommand != null) currentOnStop()
+                        lastSentCommand = null
+                        return
+                    }
+
+                    val scale = (maxTravel / distance).coerceAtMost(1f)
+                    val clampedOffset = Offset(vector.x * scale, vector.y * scale)
+                    val direction = if (abs(clampedOffset.x) > abs(clampedOffset.y)) {
+                        if (clampedOffset.x > 0f) PtzDirection.RIGHT else PtzDirection.LEFT
+                    } else {
+                        if (clampedOffset.y > 0f) PtzDirection.DOWN else PtzDirection.UP
+                    }
+                    val rawSpeed = (distance / maxTravel).coerceIn(0.1f, 1f)
+                    val speed = (rawSpeed * 10).roundToInt() / 10f
+                    val command = JoystickCommand(direction, speed)
+                    dragOffset = clampedOffset
+                    if (command != lastSentCommand) {
+                        currentOnMove(command.direction, command.speed)
+                        lastSentCommand = command
+                    }
+                }
+
+                detectDragGestures(
+                    onDragStart = { position ->
+                        updateJoystick(
+                            position - Offset(size.width / 2f, size.height / 2f)
+                        )
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        updateJoystick(dragOffset + dragAmount)
+                    },
+                    onDragEnd = {
+                        dragOffset = Offset.Zero
+                        if (lastSentCommand != null) currentOnStop()
+                        lastSentCommand = null
+                    },
+                    onDragCancel = {
+                        dragOffset = Offset.Zero
+                        if (lastSentCommand != null) currentOnStop()
+                        lastSentCommand = null
+                    }
+                )
+            }
+            .semantics {
+                contentDescription = "Controller PTZ. Geser ke arah kamera, lepas untuk berhenti."
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.7f)
+                .height(1.dp)
+                .background(BorderSubtle)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxHeight(0.7f)
+                .width(1.dp)
+                .background(BorderSubtle)
+        )
+        Box(
+            modifier = Modifier
+                .offset {
+                    IntOffset(dragOffset.x.roundToInt(), dragOffset.y.roundToInt())
+                }
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(SurfaceWhite)
+                .border(1.dp, PrimaryBlue.copy(alpha = 0.25f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = PrimaryBlue,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(Icons.Default.ControlCamera, contentDescription = null, tint = PrimaryBlue)
+            }
+        }
+    }
+}
+
 @Composable
 private fun PtzControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -653,13 +832,29 @@ private fun PtzControlButton(
 }
 
 @Composable
-private fun MicrophoneTalkPanel(
+private fun CameraTalkPanel(
     hasPermission: Boolean,
-    isCapturing: Boolean,
-    audioLevel: Float,
+    isRecording: Boolean,
+    isUploading: Boolean,
     errorMessage: String?,
-    onToggleCapture: () -> Unit
+    statusMessage: String?,
+    onRequestPermission: () -> Unit,
+    onStart: () -> Boolean,
+    onFinish: () -> Unit
 ) {
+    val currentHasPermission by rememberUpdatedState(hasPermission)
+    val currentIsRecording by rememberUpdatedState(isRecording)
+    val currentIsUploading by rememberUpdatedState(isUploading)
+    val currentOnRequestPermission by rememberUpdatedState(onRequestPermission)
+    val currentOnStart by rememberUpdatedState(onStart)
+    val currentOnFinish by rememberUpdatedState(onFinish)
+    val buttonText = when {
+        isUploading -> "Mengirim audio ke kamera..."
+        isRecording -> "Lepaskan untuk mengirim"
+        hasPermission -> "Tahan untuk Bicara"
+        else -> "Izinkan mikrofon"
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -676,48 +871,81 @@ private fun MicrophoneTalkPanel(
                 color = TextPrimary
             )
             Text(
-                text = "Tes mikrofon lokal. Suara belum dikirim ke kamera karena backend talk belum tersedia.",
+                text = "Tahan tombol saat berbicara. Lepaskan untuk mengirim suara ke speaker kamera.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary
             )
-            Button(
-                onClick = onToggleCapture,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isCapturing) StatusDanger else PrimaryBlue
-                )
-            ) {
-                Icon(
-                    imageVector = if (isCapturing) Icons.Default.MicOff else Icons.Default.Mic,
-                    contentDescription = null
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    when {
-                        isCapturing -> "Hentikan tes mikrofon"
-                        hasPermission -> "Mulai tes mikrofon"
-                        else -> "Izinkan mikrofon"
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (isRecording) StatusDanger else PrimaryBlue)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = {
+                                if (currentIsUploading) return@detectTapGestures
+                                if (!currentHasPermission) {
+                                    currentOnRequestPermission()
+                                    return@detectTapGestures
+                                }
+                                if (currentOnStart()) {
+                                    try {
+                                        tryAwaitRelease()
+                                    } finally {
+                                        currentOnFinish()
+                                    }
+                                }
+                            }
+                        )
                     }
-                )
-            }
-            if (isCapturing) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(BorderSubtle)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(audioLevel)
-                            .fillMaxHeight()
-                            .background(PrimaryBlue)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = buttonText
+                        onClick(label = buttonText) {
+                            when {
+                                currentIsUploading -> false
+                                !currentHasPermission -> {
+                                    currentOnRequestPermission()
+                                    true
+                                }
+                                currentIsRecording -> {
+                                    currentOnFinish()
+                                    true
+                                }
+                                else -> currentOnStart()
+                            }
+                        }
+                    }
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isUploading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (isRecording) Icons.Default.Mic else Icons.Default.MicNone,
+                        contentDescription = null,
+                        tint = Color.White
                     )
                 }
+                Spacer(Modifier.width(8.dp))
+                Text(buttonText, color = Color.White, fontWeight = FontWeight.SemiBold)
             }
             if (errorMessage != null) {
                 Text(errorMessage, color = StatusDanger, style = MaterialTheme.typography.bodySmall)
+            }
+            if (statusMessage != null) {
+                Text(
+                    text = "Respons kamera: $statusMessage",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }

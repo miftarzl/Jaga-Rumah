@@ -8,9 +8,14 @@ import com.nayakacctv.data.model.*
 import com.nayakacctv.data.network.ApiService
 import com.nayakacctv.ui.utils.BiometricHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -186,12 +191,18 @@ class NayakaRepository(
 
     suspend fun controlCameraPtz(
         cameraId: String,
-        direction: PtzDirection
+        direction: PtzDirection,
+        speed: Float = 0.5f,
+        durationMs: Int = 400
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val response = api.controlCameraPtz(
                 cameraId,
-                PtzControlRequest(direction = direction)
+                PtzControlRequest(
+                    direction = direction,
+                    speed = speed,
+                    durationMs = durationMs
+                )
             )
             if (response.isSuccessful) {
                 val responseText = response.body()?.use { it.string() }.orEmpty()
@@ -218,6 +229,50 @@ class NayakaRepository(
             Result.failure(Exception(e.localizedMessage ?: "Gagal mengirim perintah PTZ."))
         }
     }
+
+    suspend fun sendCameraTalk(cameraId: String, audioFile: File): Result<String> =
+        withContext(Dispatchers.IO) {
+            if (!audioFile.isFile || audioFile.length() <= 0L) {
+                return@withContext Result.failure(Exception("Rekaman audio kosong atau tidak ditemukan."))
+            }
+            if (audioFile.length() > MAX_CAMERA_TALK_AUDIO_BYTES) {
+                return@withContext Result.failure(Exception("Ukuran audio melebihi batas 5 MB."))
+            }
+
+            try {
+                val audioPart = MultipartBody.Part.createFormData(
+                    "audio",
+                    audioFile.name,
+                    audioFile.asRequestBody("audio/mp4".toMediaType())
+                )
+                val response = api.sendCameraTalk(cameraId, audioPart)
+                if (response.isSuccessful) {
+                    val responseText = response.body()?.use { it.string() }.orEmpty()
+                    Result.success(
+                        responseText.takeIf { it.isNotBlank() }
+                            ?: "Server menerima audio untuk diputar di speaker kamera."
+                    )
+                } else {
+                    val responseText = response.errorBody()?.use { it.string() }.orEmpty()
+                    val apiMessage = try {
+                        gson.fromJson(responseText, ApiErrorResponse::class.java)?.error?.message
+                    } catch (_: Exception) {
+                        null
+                    }
+                    Result.failure(
+                        Exception(
+                            apiMessage?.takeIf { it.isNotBlank() }
+                                ?: responseText.takeIf { it.isNotBlank() }?.take(500)
+                                ?: "Gagal mengirim audio ke kamera (HTTP ${response.code()})."
+                        )
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(Exception(e.localizedMessage ?: "Gagal mengirim audio ke kamera."))
+            }
+        }
 
     suspend fun updateCamera(id: String, name: String, location: String, streamUrl: String): Result<Camera> {
         tokenManager.saveCameraOverride(id, name.trim(), location.trim(), streamUrl.trim())

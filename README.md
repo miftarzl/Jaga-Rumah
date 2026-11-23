@@ -240,7 +240,8 @@ Berkas APK yang dihasilkan akan berada di:
 3. **Kamera & Siaran Langsung (Live View)**:
    - Pencarian kamera dan filter status
    - Pemutar live streaming MJPEG latensi rendah
-   - Kontrol PTZ (Atas, Bawah, Kiri, Kanan)
+   - Kontrol PTZ dengan tombol arah dan joystick
+   - Push-to-talk ke speaker kamera melalui endpoint backend
    - Snapshot foto seketika ke memori perangkat
    - Perekaman video lokal dengan indikator REC
 4. **Histori Rekaman & Timeline Player**:

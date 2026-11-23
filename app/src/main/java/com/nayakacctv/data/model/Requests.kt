@@ -62,6 +62,8 @@ data class PtzControlRequest(
     @SerializedName("duration_ms") val durationMs: Int = 400
 )
 
+const val MAX_CAMERA_TALK_AUDIO_BYTES = 5L * 1024L * 1024L
+
 data class TriggerSosRequest(
     @SerializedName("latitude") val latitude: Double? = null,
     @SerializedName("longitude") val longitude: Double? = null,

@@ -1,6 +1,7 @@
 package com.nayakacctv.data.network
 
 import com.nayakacctv.data.model.*
+import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Streaming
@@ -74,6 +75,13 @@ interface ApiService {
     suspend fun controlCameraPtz(
         @Path("id") id: String,
         @Body request: PtzControlRequest
+    ): Response<ResponseBody>
+
+    @Multipart
+    @POST("mobile/cameras/{id}/talk")
+    suspend fun sendCameraTalk(
+        @Path("id") id: String,
+        @Part audio: MultipartBody.Part
     ): Response<ResponseBody>
 
     @POST("mobile/devices/claim")

@@ -21,14 +21,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nayakacctv.ui.theme.PrimaryBlue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.util.concurrent.TimeUnit
+
+private const val MAX_MJPEG_AUTOMATIC_RETRIES = 3
 
 /**
  * Native Jetpack Compose MJPEG Stream Player.
@@ -72,6 +77,12 @@ fun MjpegStreamView(
             else -> "http://dev.nayakacloud.com:701/api/v1$trimmed"
         }
     }
+    var automaticRetryAttempts by remember(safeUrl) { mutableIntStateOf(0) }
+
+    LaunchedEffect(safeUrl) {
+        currentBitmap = null
+        automaticRetryAttempts = 0
+    }
 
     LaunchedEffect(safeUrl, retryTrigger) {
         isLoading = true
@@ -96,12 +107,7 @@ fun MjpegStreamView(
                 val call = client.newCall(request)
                 call.execute().use { response ->
                     if (!response.isSuccessful) {
-                        withContext(Dispatchers.Main) {
-                            errorMessage = "Gagal terhubung ke kamera (HTTP ${response.code})"
-                            isLoading = false
-                            onStateChange("error")
-                        }
-                        return@use
+                        throw IOException("Gagal terhubung ke kamera (HTTP ${response.code})")
                     }
 
                     val body = response.body ?: throw Exception("Response body dari kamera kosong")
@@ -113,6 +119,7 @@ fun MjpegStreamView(
                         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         withContext(Dispatchers.Main) {
                             currentBitmap = bmp
+                            automaticRetryAttempts = 0
                             isLoading = false
                             onStateChange("playing")
                         }
@@ -153,6 +160,7 @@ fun MjpegStreamView(
                                             withContext(Dispatchers.Main) {
                                                 currentBitmap = bmp
                                                 if (isLoading) {
+                                                    automaticRetryAttempts = 0
                                                     isLoading = false
                                                     onStateChange("playing")
                                                 }
@@ -164,15 +172,29 @@ fun MjpegStreamView(
                             prevByte = curByte
                         }
                     }
+                    if (isActive) throw IOException("Siaran kamera terputus.")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (isActive) {
-                    withContext(Dispatchers.Main) {
-                        if (currentBitmap == null) {
+                    val nextAttempt = withContext(Dispatchers.Main) {
+                        if (automaticRetryAttempts < MAX_MJPEG_AUTOMATIC_RETRIES) {
+                            automaticRetryAttempts++
+                            errorMessage = null
+                            isLoading = true
+                            onStateChange("reconnecting")
+                            automaticRetryAttempts
+                        } else {
                             errorMessage = "Koneksi ke kamera terputus: ${e.localizedMessage ?: "Timeout"}"
                             isLoading = false
+                            onStateChange("error")
+                            null
                         }
-                        onStateChange("error")
+                    }
+                    if (nextAttempt != null) {
+                        delay((nextAttempt * 1_000L).coerceAtMost(4_000L))
+                        withContext(Dispatchers.Main) { retryTrigger++ }
                     }
                 }
             }
@@ -221,7 +243,7 @@ fun MjpegStreamView(
         }
 
         // Tampilan Error jika gagal tersambung dan belum ada frame
-        if (errorMessage != null && bmp == null) {
+        if (errorMessage != null) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -245,7 +267,10 @@ fun MjpegStreamView(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
-                    onClick = { retryTrigger++ },
+                    onClick = {
+                        automaticRetryAttempts = 0
+                        retryTrigger++
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     shape = RoundedCornerShape(8.dp)
                 ) {
@@ -255,5 +280,6 @@ fun MjpegStreamView(
                 }
             }
         }
+
     }
 }
