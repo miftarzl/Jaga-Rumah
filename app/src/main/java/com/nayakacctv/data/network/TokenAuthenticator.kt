@@ -53,7 +53,7 @@ class TokenAuthenticator(
                     val apiRes: ApiResponse<AuthTokens> = gson.fromJson(resString, type)
                     val newTokens = apiRes.data ?: return null
 
-                    tokenManager.saveTokens(newTokens.accessToken, newTokens.refreshToken)
+                    tokenManager.saveRefreshedTokens(newTokens.accessToken, newTokens.refreshToken)
 
                     return response.request.newBuilder()
                         .header("Authorization", "Bearer ${newTokens.accessToken}")

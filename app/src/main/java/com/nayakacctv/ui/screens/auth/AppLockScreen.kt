@@ -79,6 +79,9 @@ fun AppLockScreen(
     val isBiometricAvailable = remember {
         BiometricHelper.isBiometricAvailable(context)
     }
+    val shouldUseBiometric = remember {
+        repository.isBiometricEnabled() && isBiometricAvailable
+    }
 
     // Fungsi otentikasi Google untuk akun Google
     val triggerGoogleAuth = {
@@ -112,7 +115,7 @@ fun AppLockScreen(
 
     // Fungsi pemanggil dialog biometrik
     val triggerBiometricAuth = {
-        if (activity != null && isBiometricAvailable) {
+        if (activity != null && shouldUseBiometric) {
             errorMessage = null
             BiometricHelper.showBiometricPrompt(
                 activity = activity,
@@ -159,7 +162,7 @@ fun AppLockScreen(
     // Munculkan prompt biometrik secara otomatis layaknya m-banking (dengan delay agar Activity sudah RESUMED)
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(350)
-        if (isBiometricAvailable) {
+        if (shouldUseBiometric) {
             triggerBiometricAuth()
         } else {
             if (!isGoogleUser) {
@@ -293,7 +296,7 @@ fun AppLockScreen(
             // ── Opsi Masuk Berdasarkan Tipe Akun ─────────────────────────
             if (isGoogleUser) {
                 // ── AKUN GOOGLE: Sidik Jari + Buka dengan Google ──────────
-                if (isBiometricAvailable) {
+                if (shouldUseBiometric) {
                     Button(
                         onClick = { triggerBiometricAuth() },
                         enabled = !isLoading && !isGoogleLoading && !isBiometricVerifying,
@@ -346,7 +349,7 @@ fun AppLockScreen(
                 )
             } else {
                 // ── AKUN EMAIL & PASSWORD: Sidik Jari + Form Kata Sandi ───
-                if (isBiometricAvailable) {
+                if (shouldUseBiometric) {
                     Button(
                         onClick = { triggerBiometricAuth() },
                         enabled = !isLoading && !isBiometricVerifying,
@@ -390,7 +393,7 @@ fun AppLockScreen(
                 }
 
                 // Tombol Tampilkan Form Password (jika disembunyikan)
-                if (isBiometricAvailable && !showPasswordForm) {
+                if (shouldUseBiometric && !showPasswordForm) {
                     TextButton(
                         onClick = { showPasswordForm = true }
                     ) {
@@ -410,7 +413,7 @@ fun AppLockScreen(
                 }
 
                 // Form Input Password
-                AnimatedVisibility(visible = showPasswordForm || !isBiometricAvailable) {
+                AnimatedVisibility(visible = showPasswordForm || !shouldUseBiometric) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally

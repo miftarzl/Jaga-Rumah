@@ -1,6 +1,7 @@
 package com.nayakacctv.data.repository
 
 import android.content.Context
+import android.util.Base64
 import com.google.gson.Gson
 import com.nayakacctv.data.local.TokenManager
 import com.nayakacctv.data.model.*
@@ -85,6 +86,7 @@ class NayakaRepository(
             tokenManager.saveAuthProvider("password")
             val customer = tokens.customer ?: Customer("cust-1", "Pengguna Nayaka", email)
             tokenManager.saveCustomer(customer)
+            tokenManager.updateBiometricToken(tokens.refreshToken, customer)
             clearDataCaches()
             customer
         }
@@ -95,8 +97,9 @@ class NayakaRepository(
         return safeApiCall { api.loginGoogle(req) }.mapCatching { tokens ->
             tokenManager.saveTokens(tokens.accessToken, tokens.refreshToken)
             tokenManager.saveAuthProvider("google")
-            val customer = tokens.customer ?: Customer("cust-google", "Pengguna Google", "user@gmail.com")
+            val customer = tokens.customer ?: googleCustomerFallback(idToken)
             tokenManager.saveCustomer(customer)
+            tokenManager.updateBiometricToken(tokens.refreshToken, customer)
             clearDataCaches()
             customer
         }
@@ -116,6 +119,7 @@ class NayakaRepository(
             tokenManager.saveAuthProvider("password")
             val customer = tokens.customer ?: Customer("cust-new", name, email)
             tokenManager.saveCustomer(customer)
+            tokenManager.updateBiometricToken(tokens.refreshToken, customer)
             clearDataCaches()
             customer
         }
@@ -432,6 +436,26 @@ class NayakaRepository(
         it.document ?: TermsDoc()
     }
 
+    private fun googleCustomerFallback(idToken: String): Customer {
+        val claims = runCatching {
+            val payload = idToken.split('.').getOrNull(1) ?: return@runCatching null
+            val decoded = Base64.decode(
+                payload,
+                Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+            )
+            gson.fromJson(String(decoded, Charsets.UTF_8), com.google.gson.JsonObject::class.java)
+        }.getOrNull()
+        val subject = runCatching { claims?.get("sub")?.asString }.getOrNull()
+        val email = runCatching { claims?.get("email")?.asString }.getOrNull().orEmpty()
+        val name = runCatching { claims?.get("name")?.asString }.getOrNull()
+            ?.takeIf { it.isNotBlank() } ?: "Pengguna Google"
+        return Customer(
+            id = subject?.takeIf { it.isNotBlank() }?.let { "google-$it" } ?: "cust-google",
+            fullName = name,
+            email = email.ifBlank { "user@gmail.com" }
+        )
+    }
+
     suspend fun logout(clearBiometric: Boolean = false) {
         clearDataCaches()
         withContext(Dispatchers.IO) {
@@ -479,9 +503,8 @@ class NayakaRepository(
 
     fun enableBiometric(): Boolean {
         val refreshToken = tokenManager.getRefreshToken() ?: return false
-        val customer = tokenManager.getCustomer()
-        tokenManager.enableBiometric(refreshToken, customer)
-        return true
+        val customer = tokenManager.getCustomer() ?: return false
+        return tokenManager.enableBiometric(refreshToken, customer)
     }
 
     fun disableBiometric() {
@@ -489,8 +512,7 @@ class NayakaRepository(
     }
 
     fun canUseBiometric(context: Context): Boolean {
-        return tokenManager.isBiometricEnabled() &&
-                !tokenManager.getBiometricRefreshToken().isNullOrBlank() &&
+        return !tokenManager.getBiometricRefreshToken().isNullOrBlank() &&
                 BiometricHelper.isBiometricAvailable(context)
     }
 

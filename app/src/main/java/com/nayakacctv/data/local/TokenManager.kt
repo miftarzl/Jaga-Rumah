@@ -8,6 +8,8 @@ import com.google.gson.Gson
 import com.nayakacctv.data.model.Customer
 import com.nayakacctv.data.model.CustomerCameraEdit
 import com.nayakacctv.data.model.Recording
+import java.security.MessageDigest
+import java.util.Locale
 import java.util.UUID
 
 class TokenManager(context: Context) {
@@ -39,7 +41,21 @@ class TokenManager(context: Context) {
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
         private const val KEY_BIOMETRIC_REFRESH_TOKEN = "biometric_refresh_token"
         private const val KEY_BIOMETRIC_CUSTOMER_DATA = "biometric_customer_data"
+        private const val KEY_BIOMETRIC_ACCOUNT_KEYS = "biometric_account_keys"
+        private const val KEY_BIOMETRIC_LAST_ACCOUNT = "biometric_last_account"
+        private const val KEY_BIOMETRIC_MIGRATION_COMPLETE = "biometric_account_migration_complete"
         private const val KEY_AUTH_PROVIDER = "auth_provider"
+    }
+
+    init {
+        if (!prefs.getBoolean(KEY_BIOMETRIC_MIGRATION_COMPLETE, false)) {
+            prefs.edit()
+                .remove(KEY_BIOMETRIC_ENABLED)
+                .remove(KEY_BIOMETRIC_REFRESH_TOKEN)
+                .remove(KEY_BIOMETRIC_CUSTOMER_DATA)
+                .putBoolean(KEY_BIOMETRIC_MIGRATION_COMPLETE, true)
+                .apply()
+        }
     }
 
     fun getAccessToken(): String? = prefs.getString(KEY_ACCESS_TOKEN, null)
@@ -51,11 +67,18 @@ class TokenManager(context: Context) {
             if (accessToken != null) putString(KEY_ACCESS_TOKEN, accessToken) else remove(KEY_ACCESS_TOKEN)
             if (refreshToken != null) {
                 putString(KEY_REFRESH_TOKEN, refreshToken)
-                putString(KEY_BIOMETRIC_REFRESH_TOKEN, refreshToken)
             } else {
                 remove(KEY_REFRESH_TOKEN)
             }
             apply()
+        }
+    }
+
+    fun saveRefreshedTokens(accessToken: String, refreshToken: String) {
+        saveTokens(accessToken, refreshToken)
+        val customer = getCustomer()
+        if (isBiometricEnabled(customer)) {
+            updateBiometricToken(refreshToken, customer)
         }
     }
 
@@ -73,7 +96,6 @@ class TokenManager(context: Context) {
         if (customer != null) {
             val json = gson.toJson(customer)
             editor.putString(KEY_USER_DATA, json)
-            editor.putString(KEY_BIOMETRIC_CUSTOMER_DATA, json)
         } else {
             editor.remove(KEY_USER_DATA)
         }
@@ -81,9 +103,7 @@ class TokenManager(context: Context) {
     }
 
     fun getCustomer(): Customer? {
-        val json = prefs.getString(KEY_USER_DATA, null)
-            ?: prefs.getString(KEY_BIOMETRIC_CUSTOMER_DATA, null)
-            ?: return null
+        val json = prefs.getString(KEY_USER_DATA, null) ?: return null
         return try {
             gson.fromJson(json, Customer::class.java)
         } catch (e: Exception) {
@@ -91,51 +111,113 @@ class TokenManager(context: Context) {
         }
     }
 
-    fun isBiometricEnabled(): Boolean = prefs.getBoolean(KEY_BIOMETRIC_ENABLED, true)
+    fun isBiometricEnabled(customer: Customer? = getCustomer()): Boolean {
+        val key = biometricAccountKey(customer) ?: return false
+        return isBiometricAccountEnabled(key)
+    }
 
     fun setBiometricEnabled(enabled: Boolean) {
+        val customer = getCustomer() ?: return
+        val key = biometricAccountKey(customer) ?: return
         if (!enabled) {
-            disableBiometric()
-        } else {
-            prefs.edit().putBoolean(KEY_BIOMETRIC_ENABLED, true).apply()
+            disableBiometric(customer)
+        } else if (!prefs.getString(biometricRefreshTokenKey(key), null).isNullOrBlank()) {
+            prefs.edit().putBoolean(biometricEnabledKey(key), true).apply()
         }
     }
 
-    fun enableBiometric(refreshToken: String, customer: Customer?) {
+    fun enableBiometric(refreshToken: String, customer: Customer?): Boolean {
+        val key = biometricAccountKey(customer) ?: return false
+        if (refreshToken.isBlank() || customer == null) return false
+        val accounts = prefs.getStringSet(KEY_BIOMETRIC_ACCOUNT_KEYS, emptySet())
+            .orEmpty()
+            .toMutableSet()
+            .apply { add(key) }
         val editor = prefs.edit()
-            .putBoolean(KEY_BIOMETRIC_ENABLED, true)
-            .putString(KEY_BIOMETRIC_REFRESH_TOKEN, refreshToken)
-        if (customer != null) {
-            editor.putString(KEY_BIOMETRIC_CUSTOMER_DATA, gson.toJson(customer))
+            .putBoolean(biometricEnabledKey(key), true)
+            .putString(biometricRefreshTokenKey(key), refreshToken)
+            .putString(biometricCustomerDataKey(key), gson.toJson(customer))
+            .putString(KEY_BIOMETRIC_LAST_ACCOUNT, key)
+            .putStringSet(KEY_BIOMETRIC_ACCOUNT_KEYS, accounts)
+        editor.apply()
+        return true
+    }
+
+    fun disableBiometric(customer: Customer? = getCustomer()) {
+        val key = biometricAccountKey(customer) ?: return
+        val accounts = prefs.getStringSet(KEY_BIOMETRIC_ACCOUNT_KEYS, emptySet())
+            .orEmpty()
+            .toMutableSet()
+        accounts.remove(key)
+        val editor = prefs.edit()
+            .remove(biometricEnabledKey(key))
+            .remove(biometricRefreshTokenKey(key))
+            .remove(biometricCustomerDataKey(key))
+            .putStringSet(KEY_BIOMETRIC_ACCOUNT_KEYS, accounts)
+        if (prefs.getString(KEY_BIOMETRIC_LAST_ACCOUNT, null) == key) {
+            if (accounts.isEmpty()) {
+                editor.remove(KEY_BIOMETRIC_LAST_ACCOUNT)
+            } else {
+                editor.putString(KEY_BIOMETRIC_LAST_ACCOUNT, accounts.first())
+            }
         }
         editor.apply()
     }
 
-    fun disableBiometric() {
-        prefs.edit()
-            .putBoolean(KEY_BIOMETRIC_ENABLED, false)
-            .remove(KEY_BIOMETRIC_REFRESH_TOKEN)
-            .remove(KEY_BIOMETRIC_CUSTOMER_DATA)
-            .apply()
+    fun getBiometricRefreshToken(customer: Customer? = getBiometricCustomer()): String? {
+        val key = biometricAccountKey(customer) ?: return null
+        if (!isBiometricAccountEnabled(key)) return null
+        return prefs.getString(biometricRefreshTokenKey(key), null)
     }
 
-    fun getBiometricRefreshToken(): String? =
-        prefs.getString(KEY_BIOMETRIC_REFRESH_TOKEN, null) ?: getRefreshToken()
-
-    fun updateBiometricToken(newRefreshToken: String) {
-        prefs.edit().putString(KEY_BIOMETRIC_REFRESH_TOKEN, newRefreshToken).apply()
+    fun updateBiometricToken(
+        newRefreshToken: String,
+        customer: Customer? = getBiometricCustomer()
+    ) {
+        val key = biometricAccountKey(customer) ?: return
+        if (isBiometricAccountEnabled(key)) {
+            prefs.edit()
+                .putString(biometricRefreshTokenKey(key), newRefreshToken)
+                .putString(biometricCustomerDataKey(key), gson.toJson(customer))
+                .apply()
+        }
     }
 
     fun getBiometricCustomer(): Customer? {
-        val json = prefs.getString(KEY_BIOMETRIC_CUSTOMER_DATA, null)
-            ?: prefs.getString(KEY_USER_DATA, null)
+        val accounts = prefs.getStringSet(KEY_BIOMETRIC_ACCOUNT_KEYS, emptySet()).orEmpty()
+        val lastAccount = prefs.getString(KEY_BIOMETRIC_LAST_ACCOUNT, null)
+        val key = lastAccount?.takeIf { it in accounts && isBiometricAccountEnabled(it) }
+            ?: accounts.firstOrNull { isBiometricAccountEnabled(it) }
             ?: return null
+        val json = prefs.getString(biometricCustomerDataKey(key), null) ?: return null
         return try {
             gson.fromJson(json, Customer::class.java)
         } catch (e: Exception) {
             null
         }
     }
+
+    private fun isBiometricAccountEnabled(key: String): Boolean =
+        prefs.getBoolean(biometricEnabledKey(key), false) &&
+            !prefs.getString(biometricRefreshTokenKey(key), null).isNullOrBlank()
+
+    private fun biometricAccountKey(customer: Customer?): String? {
+        val id = customer?.id?.trim()?.takeIf {
+            it.isNotBlank() && it !in setOf("cust-1", "cust-new", "cust-google", "cust-bio")
+        }
+        val email = customer?.email?.trim()?.lowercase(Locale.ROOT)?.takeIf {
+            it.isNotBlank() && it != "user@gmail.com"
+        }
+        val identity = id ?: email
+            ?: return null
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(identity.lowercase(Locale.ROOT).toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { byte -> "%02x".format(byte) }
+    }
+
+    private fun biometricEnabledKey(accountKey: String) = "${KEY_BIOMETRIC_ENABLED}_$accountKey"
+    private fun biometricRefreshTokenKey(accountKey: String) = "${KEY_BIOMETRIC_REFRESH_TOKEN}_$accountKey"
+    private fun biometricCustomerDataKey(accountKey: String) = "${KEY_BIOMETRIC_CUSTOMER_DATA}_$accountKey"
 
     fun saveAuthProvider(provider: String) {
         prefs.edit().putString(KEY_AUTH_PROVIDER, provider).apply()
@@ -217,11 +299,20 @@ class TokenManager(context: Context) {
             .remove(KEY_ACCESS_TOKEN)
             .remove(KEY_REFRESH_TOKEN)
             .remove(KEY_USER_DATA)
+            .remove(KEY_AUTH_PROVIDER)
         if (!preserveBiometric) {
+            prefs.all.keys
+                .filter {
+                    it.startsWith("${KEY_BIOMETRIC_ENABLED}_") ||
+                        it.startsWith("${KEY_BIOMETRIC_REFRESH_TOKEN}_") ||
+                        it.startsWith("${KEY_BIOMETRIC_CUSTOMER_DATA}_")
+                }
+                .forEach(editor::remove)
             editor.remove(KEY_BIOMETRIC_ENABLED)
                 .remove(KEY_BIOMETRIC_REFRESH_TOKEN)
                 .remove(KEY_BIOMETRIC_CUSTOMER_DATA)
-                .remove(KEY_AUTH_PROVIDER)
+                .remove(KEY_BIOMETRIC_ACCOUNT_KEYS)
+                .remove(KEY_BIOMETRIC_LAST_ACCOUNT)
         }
         editor.apply()
     }
