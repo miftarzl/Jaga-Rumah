@@ -25,8 +25,11 @@ sealed class Screen(val route: String) {
 }
 
 sealed class BottomTab(val route: String, val title: String) {
-    object Dashboard : BottomTab("tab_dashboard", "Dashboard")
+    object Dashboard : BottomTab("tab_dashboard", "Beranda")
+    object Devices : BottomTab("tab_devices", "Perangkat")
     object Cameras : BottomTab("tab_cameras", "Kamera")
+    object Automation : BottomTab("tab_automation", "Otomasi")
+    object More : BottomTab("tab_more", "Lainnya")
     object Playback : BottomTab("tab_playback", "Playback")
     object Alerts : BottomTab("tab_alerts", "Alert")
     object Profile : BottomTab("tab_profile", "Profil")

@@ -17,6 +17,9 @@ import com.nayakacctv.ui.screens.cameras.CamerasScreen
 import com.nayakacctv.ui.screens.dashboard.DashboardScreen
 import com.nayakacctv.ui.screens.playback.PlaybackScreen
 import com.nayakacctv.ui.screens.profile.ProfileScreen
+import com.nayakacctv.ui.screens.smarthome.SmartHomeAutomationScreen
+import com.nayakacctv.ui.screens.smarthome.SmartHomeDevicesScreen
+import com.nayakacctv.ui.screens.smarthome.SmartHomeMoreScreen
 import com.nayakacctv.ui.theme.BorderSubtle
 import com.nayakacctv.ui.theme.PrimaryBlue
 import com.nayakacctv.ui.theme.SurfaceWhite
@@ -36,13 +39,22 @@ fun MainTabsScreen(
 ) {
     val tabs = listOf(
         BottomTab.Dashboard,
+        BottomTab.Devices,
         BottomTab.Cameras,
-        BottomTab.Playback,
-        BottomTab.Alerts,
-        BottomTab.Profile
+        BottomTab.Automation,
+        BottomTab.More
     )
     var selectedTabRoute by rememberSaveable { mutableStateOf(BottomTab.Dashboard.route) }
-    val selectedTab = tabs.firstOrNull { it.route == selectedTabRoute } ?: BottomTab.Dashboard
+    val selectedTab = tabs.firstOrNull { it.route == selectedTabRoute }
+        ?: if (
+            selectedTabRoute == BottomTab.Playback.route ||
+            selectedTabRoute == BottomTab.Alerts.route ||
+            selectedTabRoute == BottomTab.Profile.route
+        ) {
+            BottomTab.More
+        } else {
+            BottomTab.Dashboard
+        }
 
     Scaffold(
         bottomBar = {
@@ -59,7 +71,10 @@ fun MainTabsScreen(
                             Icon(
                                 imageVector = when (tab) {
                                     BottomTab.Dashboard -> Icons.Default.Dashboard
+                                    BottomTab.Devices -> Icons.Default.Devices
                                     BottomTab.Cameras -> Icons.Default.Videocam
+                                    BottomTab.Automation -> Icons.Default.AutoMode
+                                    BottomTab.More -> Icons.Default.MoreHoriz
                                     BottomTab.Playback -> Icons.Default.VideoLibrary
                                     BottomTab.Alerts -> Icons.Default.Notifications
                                     BottomTab.Profile -> Icons.Default.Person
@@ -85,27 +100,36 @@ fun MainTabsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            when (selectedTab) {
-                BottomTab.Dashboard -> DashboardScreen(
+            when (selectedTabRoute) {
+                BottomTab.Dashboard.route -> DashboardScreen(
                     repository = repository,
                     onNavigateToCameraDetail = onNavigateToCameraDetail,
                     onNavigateToLiveView = onNavigateToLiveView,
                     onNavigateToEmergency = onNavigateToEmergency,
-                    onNavigateToAlerts = { selectedTabRoute = BottomTab.Alerts.route }
+                    onNavigateToAlerts = { selectedTabRoute = BottomTab.Alerts.route },
+                    onNavigateToDevices = { selectedTabRoute = BottomTab.Devices.route },
+                    onNavigateToAutomation = { selectedTabRoute = BottomTab.Automation.route }
                 )
-                BottomTab.Cameras -> CamerasScreen(
+                BottomTab.Devices.route -> SmartHomeDevicesScreen()
+                BottomTab.Cameras.route -> CamerasScreen(
                     repository = repository,
                     onNavigateToCameraDetail = onNavigateToCameraDetail,
                     onNavigateToLiveView = onNavigateToLiveView
                 )
-                BottomTab.Playback -> PlaybackScreen(
+                BottomTab.Automation.route -> SmartHomeAutomationScreen()
+                BottomTab.More.route -> SmartHomeMoreScreen(
+                    onNavigateToPlayback = { selectedTabRoute = BottomTab.Playback.route },
+                    onNavigateToAlerts = { selectedTabRoute = BottomTab.Alerts.route },
+                    onNavigateToProfile = { selectedTabRoute = BottomTab.Profile.route }
+                )
+                BottomTab.Playback.route -> PlaybackScreen(
                     repository = repository,
                     onNavigateToDetail = onNavigateToPlaybackDetail
                 )
-                BottomTab.Alerts -> AlertsScreen(
+                BottomTab.Alerts.route -> AlertsScreen(
                     repository = repository
                 )
-                BottomTab.Profile -> ProfileScreen(
+                BottomTab.Profile.route -> ProfileScreen(
                     repository = repository,
                     onNavigateToSubscription = onNavigateToSubscription,
                     onNavigateToHelp = onNavigateToHelp,

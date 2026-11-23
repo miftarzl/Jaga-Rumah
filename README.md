@@ -54,7 +54,7 @@ Aplikasi menggunakan pola arsitektur **Clean MVVM (Model-View-ViewModel/Reposito
 
 ```
 [UI Layer / Jetpack Compose]
-   │  Screens: Login, Dashboard, Cameras, LiveView, Playback, Alerts, SOS, Profile
+   │  Screens: Login, Smart Home Preview, Cameras, LiveView, Playback, Alerts, SOS, Profile
    │  Theme: Colors, Typography, Shapes
    ▼
 [Navigation Layer]
@@ -165,8 +165,9 @@ nayaka-mobile-kotlin/
 │               │   └── AppNavHost.kt  # Compose Navigation graph
 │               ├── screens/           # Halaman UI
 │               │   ├── auth/          # Login, Register, Forgot, Reset
-│               │   ├── dashboard/     # Ringkasan status CCTV
+│               │   ├── dashboard/     # Ringkasan rumah & status CCTV
 │               │   ├── cameras/       # List, Detail, LiveView
+│               │   ├── smarthome/     # Pratinjau perangkat, otomasi, dan menu lainnya
 │               │   ├── playback/      # List rekaman & Video timeline player
 │               │   ├── alerts/        # Notifikasi bahaya & filter
 │               │   ├── emergency/     # Panic SOS & Telepon darurat
@@ -255,10 +256,14 @@ Berkas APK yang dihasilkan akan berada di:
 7. **Langganan Cloud & Bantuan**:
    - Manajemen paket penyimpanan cloud & histori tagihan
    - Artikel bantuan dan Syarat & Ketentuan lengkap
+8. **Pratinjau Smart Home**:
+   - Dashboard rumah dengan pintasan Perangkat dan Otomasi
+   - UI pratinjau daftar perangkat per ruangan dan contoh rutinitas
+   - Belum mengendalikan perangkat sungguhan; sakelar pratinjau dinonaktifkan
 
 ## 🏠 Arah Pengembangan Smart Home
 
-JAGA RUMAH dirancang berkembang dari aplikasi CCTV menjadi pusat kendali rumah. Susunan berikut adalah arah desain produk; kontrol perangkat dan otomasi hanya tersedia setelah integrasi backend serta perangkat terkait siap.
+JAGA RUMAH berkembang dari aplikasi CCTV menjadi pusat kendali rumah. Dashboard, daftar perangkat, dan otomasi kini memiliki UI pratinjau; data perangkat masih contoh dan belum ada perintah yang dikirim ke perangkat.
 
 ### Navigasi utama
 
@@ -266,9 +271,9 @@ JAGA RUMAH dirancang berkembang dari aplikasi CCTV menjadi pusat kendali rumah. 
 - **Perangkat** — daftar perangkat yang dikelompokkan berdasarkan ruangan, dengan filter kategori seperti lampu, kunci pintu, TV, dan AC.
 - **Kamera** — live view, playback, dan peringatan kamera dalam area khusus.
 - **Otomasi** — jadwal dan aturan perangkat, misalnya menyalakan lampu teras pada waktu tertentu.
-- **Aktivitas** — riwayat kejadian perangkat, pintu, dan kamera.
+- **Lainnya** — akses ke playback, peringatan CCTV, profil, dan pratinjau aktivitas rumah.
 
-Profil dan pengaturan akun dapat diakses dari bagian atas aplikasi agar navigasi utama tetap berfokus pada fungsi rumah.
+Aktivitas perangkat dan otomatisasi masih berupa pratinjau sampai tersedia integrasi backend dan perangkat.
 
 ### Prinsip tampilan dan kontrol
 

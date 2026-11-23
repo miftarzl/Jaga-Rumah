@@ -31,7 +31,9 @@ fun DashboardScreen(
     onNavigateToCameraDetail: (String) -> Unit,
     onNavigateToLiveView: (String) -> Unit,
     onNavigateToEmergency: () -> Unit,
-    onNavigateToAlerts: () -> Unit
+    onNavigateToAlerts: () -> Unit,
+    onNavigateToDevices: () -> Unit,
+    onNavigateToAutomation: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     var summary by remember { mutableStateOf<DashboardSummary?>(null) }
@@ -145,6 +147,72 @@ fun DashboardScreen(
                                 tint = StatusDanger,
                                 modifier = Modifier.size(22.dp)
                             )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceWhite)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Home, contentDescription = null, tint = PrimaryBlue)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Rumah Saya",
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFFEFF6FF)
+                            ) {
+                                Text(
+                                    text = "PRATINJAU",
+                                    color = PrimaryBlue,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Kontrol lampu, pintu, TV, dan perangkat rumah lainnya akan tersedia setelah integrasi perangkat siap.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = onNavigateToDevices,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Devices, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Perangkat", fontSize = 12.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onNavigateToAutomation,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Icon(Icons.Default.AutoMode, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Otomasi", fontSize = 12.sp)
+                            }
                         }
                     }
                 }
