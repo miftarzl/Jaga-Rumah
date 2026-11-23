@@ -87,7 +87,7 @@ fun LoginScreen(
         ) {
             Icon(
                 imageVector = Icons.Default.Videocam,
-                contentDescription = "Nayaka Logo",
+                contentDescription = "Logo JAGA RUMAH",
                 tint = Color.White,
                 modifier = Modifier.size(40.dp)
             )
@@ -95,7 +95,7 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Nayaka CCTV",
+            text = "JAGA RUMAH",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             color = TextPrimary

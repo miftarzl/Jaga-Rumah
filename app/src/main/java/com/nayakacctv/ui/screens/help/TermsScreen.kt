@@ -27,7 +27,7 @@ fun TermsScreen(
             val res = repository.getTerms()
             termsContent = res.getOrNull()?.content ?: """
                 1. Ketentuan Umum
-                Dengan menggunakan aplikasi Nayaka CCTV, Anda menyetujui seluruh syarat dan ketentuan yang diatur oleh pihak penyedia layanan demi menjaga privasi dan keamanan bersama.
+                Dengan menggunakan aplikasi JAGA RUMAH, Anda menyetujui seluruh syarat dan ketentuan yang diatur oleh pihak penyedia layanan demi menjaga privasi dan keamanan bersama.
 
                 2. Keamanan Akun & Kredensial
                 Pengguna bertanggung jawab penuh atas kerahasiaan kata sandi, token otentikasi, serta akses biometrik pada perangkat masing-masing.

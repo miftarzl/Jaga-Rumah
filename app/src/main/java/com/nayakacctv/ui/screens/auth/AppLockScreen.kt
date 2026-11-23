@@ -120,7 +120,7 @@ fun AppLockScreen(
             BiometricHelper.showBiometricPrompt(
                 activity = activity,
                 title = "Verifikasi Sidik Jari",
-                subtitle = "Pindai biometrik Anda untuk membuka Nayaka CCTV",
+                subtitle = "Pindai biometrik Anda untuk membuka JAGA RUMAH",
                 negativeButtonText = if (isGoogleUser) "Buka dengan Google" else "Gunakan Kata Sandi",
                 onSuccess = {
                     if (repository.isLoggedIn()) {
@@ -205,7 +205,7 @@ fun AppLockScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Nayaka CCTV",
+                text = "JAGA RUMAH",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary

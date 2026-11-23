@@ -1,6 +1,6 @@
-# 📱 Nayaka CCTV Mobile (Native Android - Kotlin)
+# 📱 JAGA RUMAH (Native Android - Kotlin)
 
-> **Aplikasi Pemantauan CCTV & Keamanan Hunian Pintar — Native Android (Kotlin & Jetpack Compose)**  
+> **Aplikasi Smart Home untuk keamanan dan kendali hunian — Native Android (Kotlin & Jetpack Compose)**
 > Hasil migrasi lengkap dari versi React Native ke Native Kotlin modern dengan arsitektur MVVM, Material 3 Design, dan Jetpack Navigation.
 
 ---
@@ -16,12 +16,13 @@
 - [Konfigurasi API & Lingkungan](#-konfigurasi-api--lingkungan)
 - [Cara Membuka & Menjalankan](#-cara-membuka--menjalankan)
 - [Fitur Utama](#-fitur-utama)
+- [Arah Pengembangan Smart Home](#-arah-pengembangan-smart-home)
 
 ---
 
 ## 📖 Gambaran Umum
 
-**Nayaka CCTV Android Kotlin** adalah aplikasi mobile klien native yang dibangun dari awal menggunakan standar terbaru ekosistem Android:
+**JAGA RUMAH** adalah aplikasi mobile klien native yang dibangun menggunakan Kotlin dan Jetpack Compose. Aplikasi berawal dari fitur pemantauan CCTV dan dikembangkan menuju satu tempat untuk memantau keamanan serta mengendalikan perangkat rumah:
 - **UI Murni Deklaratif**: Dibangun 100% menggunakan **Jetpack Compose** dan **Material 3**.
 - **Live CCTV Streamer**: Meminta URL playback bertoken dari backend dan memutar HLS/RTSP dengan Media3; MJPEG tetap didukung untuk endpoint legacy.
 - **Keamanan Perangkat Keras**: Menggunakan `BiometricPrompt` & `EncryptedSharedPreferences` yang terenkripsi langsung via Android Keystore.
@@ -254,3 +255,28 @@ Berkas APK yang dihasilkan akan berada di:
 7. **Langganan Cloud & Bantuan**:
    - Manajemen paket penyimpanan cloud & histori tagihan
    - Artikel bantuan dan Syarat & Ketentuan lengkap
+
+## 🏠 Arah Pengembangan Smart Home
+
+JAGA RUMAH dirancang berkembang dari aplikasi CCTV menjadi pusat kendali rumah. Susunan berikut adalah arah desain produk; kontrol perangkat dan otomasi hanya tersedia setelah integrasi backend serta perangkat terkait siap.
+
+### Navigasi utama
+
+- **Beranda** — ringkasan status rumah, akses cepat ke adegan favorit, ruangan, kamera, dan aktivitas terbaru.
+- **Perangkat** — daftar perangkat yang dikelompokkan berdasarkan ruangan, dengan filter kategori seperti lampu, kunci pintu, TV, dan AC.
+- **Kamera** — live view, playback, dan peringatan kamera dalam area khusus.
+- **Otomasi** — jadwal dan aturan perangkat, misalnya menyalakan lampu teras pada waktu tertentu.
+- **Aktivitas** — riwayat kejadian perangkat, pintu, dan kamera.
+
+Profil dan pengaturan akun dapat diakses dari bagian atas aplikasi agar navigasi utama tetap berfokus pada fungsi rumah.
+
+### Prinsip tampilan dan kontrol
+
+- Beranda menampilkan informasi penting tanpa memenuhi layar dengan seluruh kontrol perangkat.
+- Kartu perangkat memperlihatkan nama, ruangan, status, dan waktu pembaruan; kontrol rinci dibuka pada halaman detail perangkat.
+- Kontrol disesuaikan dengan perangkat, seperti sakelar dan tingkat kecerahan lampu, suhu AC, atau status kunci pintu.
+- Aksi keamanan seperti membuka kunci pintu perlu label yang jelas dan konfirmasi tambahan.
+- Status offline, gagal merespons, dan waktu pembaruan terakhir harus dibedakan dari status berhasil.
+- Adegan seperti **Pulang**, **Mode Tidur**, atau **Matikan Semua** ditampilkan hanya bila perangkat dan aturan adegannya telah dikonfigurasi.
+
+Penambahan dukungan perangkat memerlukan API/backend dan jalur komunikasi yang sesuai dengan ekosistem perangkat (misalnya Wi-Fi, Zigbee, atau Matter); perubahan tampilan saja tidak cukup untuk mengendalikan perangkat fisik.
