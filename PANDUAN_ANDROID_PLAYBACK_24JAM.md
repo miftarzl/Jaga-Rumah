@@ -64,17 +64,52 @@ Authorization: Bearer <access_token>
 - `from` & `to` *(wajib)*: ISO-8601 UTC (contoh: `2026-11-23T01:12:00Z` s/d `2026-11-23T01:18:00Z`).
 - Mengembalikan stream `video/mp4` hasil remux cepat dari server (`ffmpeg -c copy`).
 
+### D. Kontrol Arah Kamera PTZ (Endpoint Baru — ONVIF via VPS)
+Gunakan endpoint ini pada tombol arah PTZ di `LiveViewScreen.kt`:
+```http
+POST /api/v1/mobile/cameras/{camera_id}/ptz
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "direction": "left",
+  "speed": 0.5,
+  "duration_ms": 400
+}
+```
+- `direction` *(wajib)*: `"up"`, `"down"`, `"left"`, `"right"`, `"zoom_in"`, `"zoom_out"`, atau `"stop"`.
+- `speed` *(opsional, default `0.5`)*: `0.1` s/d `1.0`.
+- `duration_ms` *(opsional, default `400`)*: durasi gerak dalam milidetik sebelum server otomatis mengirim `stop` (`0` = gerak terus sampai client mengirim `direction: "stop"`).
+
 ---
 
-## 3. Status Implementasi di Android
+## 3. Perubahan yang Masih Perlu Dilakukan di Android
 
-- **Ukuran file**: `Recording` memetakan `file_size_bytes`; ukuran diteruskan ke daftar dan detail rekaman.
-- **Filter Playback**: tersedia pilihan kamera dan rentang tanggal/jam lokal, dibatasi 24 jam terakhir. Timestamp dikirim sebagai UTC ISO-8601. Daftar bisa dimuat ulang tanpa memakai cache lama; rekaman lokal juga difilter oleh rentang yang sama.
-- **Paginasi**: daftar mengambil halaman berukuran 20 menggunakan `cursor` sampai semua segmen dalam periode diterima.
-- **Tarik klip**: dialog konfirmasi memakai kamera dan rentang yang dipilih, membatasi durasi hingga 30 menit, lalu meminta `video/mp4` secara terautentikasi, menyimpan stream ke `Movies/NayakaCCTV`, menambahkan rekaman lokal ke Playback, dan langsung membuka klip di pemutar.
-- **Unduh / bagikan rekaman server**: file diunduh dari endpoint stream dan disimpan ke Galeri sebelum dibagikan.
-- **Retensi**: UI menjelaskan penyimpanan maksimal 24 jam dan menampilkan pesan khusus bila rekaman sudah tidak tersedia (HTTP 404).
-- Shortcut langsung dari `LiveViewScreen` ke Playback terfilter per kamera belum ditambahkan.
+### 1. Mapping `file_size_bytes` di `Models.kt` & `NayakaRepository.kt`
+- Saat ini `Models.kt` hanya memetakan `@SerializedName("size_bytes") val sizeBytes: Long = 0`.
+- Backend mengembalikan field **`file_size_bytes`**. Tambahkan `@SerializedName("file_size_bytes") val fileSizeBytes: Long? = null` di `Recording`, lalu di `NayakaRepository.kt` (`getRecordings` & `getRecordingDetail`) isi `sizeBytes = if (r.sizeBytes > 0) r.sizeBytes else (r.fileSizeBytes ?: 0L)` agar ukuran file tampil benar di `RecordingCard`.
+
+### 2. Tambahkan Filter Kamera & Jam Kejadian di `PlaybackScreen.kt`
+- Saat ini `PlaybackScreen.kt` masih memanggil `repository.getRecordings()` tanpa parameter dan tanpa filter UI.
+- Tambahkan:
+  - **Dropdown / Chip Pilih Kamera** (mengambil daftar kamera dari `repository.getCameras()`).
+  - **Pemilih Tanggal & Rentang Jam (`Dari` – `Sampai`)** (dibatasi 24 jam terakhir) yang memanggil `repository.getRecordings(cameraId, fromIso, toIso, forceRefresh = true)`.
+  - **Pull-to-refresh** / tombol Refresh dengan `forceRefresh = true` agar tidak tertahan `recordingsCache` (dari `TimedMemoryCache`).
+  - Catatan di `NayakaRepository.getRecordings`: pastikan `localList` juga ikut difilter jika `from`/`to` diisi (atau hanya tampilkan `localList` bila tidak sedang memfilter rentang waktu server).
+
+### 3. Fitur Tarik & Unduh Klip Kejadian ke Galeri
+- Saat ini `StreamRecorder.kt` baru merekam live stream secara lokal di HP. Untuk menarik rekaman kejadian masa lalu dari VPS:
+  - Tambahkan dialog **"Tarik Klip Kejadian"** (pilih kamera, jam mulai, jam selesai — maksimal 30 menit).
+  - Panggil `GET /api/v1/mobile/cameras/{camera_id}/clip?from=...&to=...&download=1` dengan header `Authorization: Bearer <token>`, lalu simpan ke Galeri HP (`MediaStore.Video`, mirip alur simpan yang sudah ada di project).
+- Periksa juga aksi **Share / Unduh** di `PlaybackDetailScreen.kt` agar untuk rekaman dari server (`playbackUrl` diawali `http://` atau `https://`), file diunduh dulu via HTTP (atau tambahkan `?download=1`) sebelum dibagikan lewat `FileProvider`.
+
+### 4. Kontrol PTZ di `LiveViewScreen.kt`
+- Sudah terhubung ke `POST /mobile/cameras/{camera_id}/ptz` dengan autentikasi sesi.
+- Tombol arah dan zoom mengirim `direction`, `speed: 0.5`, dan `duration_ms: 400`; error dari backend ditampilkan di panel PTZ.
+
+### 5. Shortcut dari `LiveViewScreen.kt` & Penanganan Retensi 24 Jam
+- *(Opsional)* Tambahkan tombol **"Riwayat Rekaman"** di `LiveViewScreen.kt` yang langsung membuka `PlaybackScreen` terfilter untuk kamera tersebut.
+- Tampilkan keterangan di UI bahwa **"Rekaman otomatis tersimpan maksimal 24 jam"**, dan tampilkan pesan ramah jika user membuka detail rekaman yang sudah lewat 24 jam (`HTTP 404`).
 
 ---
 

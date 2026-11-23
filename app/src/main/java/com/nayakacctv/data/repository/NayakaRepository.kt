@@ -184,6 +184,41 @@ class NayakaRepository(
     suspend fun getCameraStream(id: String): Result<CameraStream> =
         safeApiCall { api.getCameraStream(id) }
 
+    suspend fun controlCameraPtz(
+        cameraId: String,
+        direction: PtzDirection
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.controlCameraPtz(
+                cameraId,
+                PtzControlRequest(direction = direction)
+            )
+            if (response.isSuccessful) {
+                val responseText = response.body()?.use { it.string() }.orEmpty()
+                Result.success(
+                    responseText.takeIf { it.isNotBlank() }
+                        ?: "HTTP ${response.code()}; server tidak memberikan detail gerakan kamera."
+                )
+            } else {
+                val responseText = response.errorBody()?.use { it.string() }.orEmpty()
+                val apiMessage = try {
+                    gson.fromJson(responseText, ApiErrorResponse::class.java)?.error?.message
+                } catch (_: Exception) {
+                    null
+                }
+                Result.failure(
+                    Exception(
+                        apiMessage?.takeIf { it.isNotBlank() }
+                            ?: responseText.takeIf { it.isNotBlank() }?.take(500)
+                            ?: "Gagal mengontrol kamera (HTTP ${response.code()})."
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(e.localizedMessage ?: "Gagal mengirim perintah PTZ."))
+        }
+    }
+
     suspend fun updateCamera(id: String, name: String, location: String, streamUrl: String): Result<Camera> {
         tokenManager.saveCameraOverride(id, name.trim(), location.trim(), streamUrl.trim())
         clearCameraCaches()

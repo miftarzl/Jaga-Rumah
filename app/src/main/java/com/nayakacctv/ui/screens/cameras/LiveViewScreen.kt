@@ -1,13 +1,17 @@
 package com.nayakacctv.ui.screens.cameras
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -20,13 +24,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.nayakacctv.data.model.Camera
+import com.nayakacctv.data.model.PtzDirection
 import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.components.CameraStreamPlayer
 import com.nayakacctv.ui.components.rememberCameraStreamController
 import com.nayakacctv.ui.components.NayakaTopAppBar
 import com.nayakacctv.ui.components.StatusBadge
 import com.nayakacctv.ui.theme.*
+import com.nayakacctv.ui.utils.MicrophoneCapture
 import com.nayakacctv.ui.utils.StreamRecorder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
@@ -56,6 +65,71 @@ fun LiveViewScreen(
     var isSavingRecording by remember { mutableStateOf(false) }
     var recordElapsedSeconds by remember { mutableLongStateOf(0L) }
     var streamStatus by remember { mutableStateOf("Menghubungkan...") }
+    var hasMicrophonePermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var isMicrophoneCapturing by remember { mutableStateOf(false) }
+    var microphoneLevel by remember { mutableFloatStateOf(0f) }
+    var microphoneError by remember { mutableStateOf<String?>(null) }
+    var isPtzLoading by remember { mutableStateOf(false) }
+    var ptzError by remember { mutableStateOf<String?>(null) }
+    var ptzStatus by remember { mutableStateOf<String?>(null) }
+    val microphoneCapture = remember { MicrophoneCapture() }
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasMicrophonePermission = granted
+        microphoneError = if (granted) null else "Izin mikrofon ditolak."
+    }
+
+    fun toggleMicrophoneCapture() {
+        if (isMicrophoneCapturing) {
+            microphoneCapture.stop()
+            isMicrophoneCapturing = false
+            microphoneLevel = 0f
+        } else if (!hasMicrophonePermission) {
+            microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            microphoneError = null
+            isMicrophoneCapturing = microphoneCapture.start(
+                scope = coroutineScope,
+                onLevelChanged = { microphoneLevel = it },
+                onError = {
+                    microphoneError = it
+                    isMicrophoneCapturing = false
+                    microphoneLevel = 0f
+                    microphoneCapture.stop()
+                }
+            )
+        }
+    }
+
+    fun sendPtzCommand(direction: PtzDirection) {
+        if (isPtzLoading) return
+        isPtzLoading = true
+        ptzError = null
+        ptzStatus = null
+        val targetCameraId = activeCameraId
+        coroutineScope.launch {
+            repository.controlCameraPtz(targetCameraId, direction)
+                .onSuccess { ptzStatus = it.take(300) }
+                .onFailure { ptzError = it.localizedMessage ?: "Gagal mengontrol kamera." }
+            isPtzLoading = false
+        }
+    }
+
+    DisposableEffect(microphoneCapture) {
+        onDispose { microphoneCapture.stop() }
+    }
+
+    LaunchedEffect(activeCameraId) {
+        microphoneCapture.stop()
+        isMicrophoneCapturing = false
+        microphoneLevel = 0f
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -237,8 +311,9 @@ fun LiveViewScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Baris Info Kamera & Tombol Ganti Kamera Cepat
                 Card(
@@ -359,94 +434,20 @@ fun LiveViewScreen(
                     )
                 }
 
-                // PTZ Pan-Tilt-Zoom Controller
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceWhite)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Kontrol Arah Kamera (PTZ)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = "Perintah gerak belum didukung oleh API backend.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
+                MicrophoneTalkPanel(
+                    hasPermission = hasMicrophonePermission,
+                    isCapturing = isMicrophoneCapturing,
+                    audioLevel = microphoneLevel,
+                    errorMessage = microphoneError,
+                    onToggleCapture = ::toggleMicrophoneCapture
+                )
 
-                        // Up
-                        IconButton(
-                            onClick = {},
-                            enabled = false,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFF1F5F9))
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Atas", tint = TextPrimary)
-                        }
-
-                        // Left - Center - Right
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(28.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = {},
-                                enabled = false,
-                                modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFF1F5F9))
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Kiri", tint = TextPrimary)
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(PrimaryBlue.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.ControlCamera, contentDescription = null, tint = PrimaryBlue)
-                            }
-
-                            IconButton(
-                                onClick = {},
-                                enabled = false,
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFF1F5F9))
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Kanan", tint = TextPrimary)
-                            }
-                        }
-
-                        // Down
-                        IconButton(
-                            onClick = {},
-                            enabled = false,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFF1F5F9))
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Bawah", tint = TextPrimary)
-                        }
-                    }
-                }
+                PtzControlPanel(
+                    isLoading = isPtzLoading,
+                    errorMessage = ptzError,
+                    statusMessage = ptzStatus,
+                    onDirection = ::sendPtzCommand
+                )
 
                 Spacer(modifier = Modifier.height(10.dp))
             }
@@ -514,6 +515,211 @@ fun LiveViewScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun PtzControlPanel(
+    isLoading: Boolean,
+    errorMessage: String?,
+    statusMessage: String?,
+    onDirection: (PtzDirection) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Kontrol Arah Kamera (PTZ)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+            Text(
+                text = "Setiap tombol menggerakkan kamera selama 400 ms.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextMuted
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            PtzControlButton(
+                icon = Icons.Default.KeyboardArrowUp,
+                description = "Atas",
+                enabled = !isLoading,
+                onClick = { onDirection(PtzDirection.UP) }
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PtzControlButton(
+                    icon = Icons.Default.KeyboardArrowLeft,
+                    description = "Kiri",
+                    enabled = !isLoading,
+                    onClick = { onDirection(PtzDirection.LEFT) }
+                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(PrimaryBlue.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = PrimaryBlue,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Default.ControlCamera, contentDescription = null, tint = PrimaryBlue)
+                    }
+                }
+                PtzControlButton(
+                    icon = Icons.Default.KeyboardArrowRight,
+                    description = "Kanan",
+                    enabled = !isLoading,
+                    onClick = { onDirection(PtzDirection.RIGHT) }
+                )
+            }
+            PtzControlButton(
+                icon = Icons.Default.KeyboardArrowDown,
+                description = "Bawah",
+                enabled = !isLoading,
+                onClick = { onDirection(PtzDirection.DOWN) }
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(
+                    onClick = { onDirection(PtzDirection.ZOOM_OUT) },
+                    enabled = !isLoading
+                ) {
+                    Icon(Icons.Default.ZoomOut, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Zoom −")
+                }
+                OutlinedButton(
+                    onClick = { onDirection(PtzDirection.ZOOM_IN) },
+                    enabled = !isLoading
+                ) {
+                    Icon(Icons.Default.ZoomIn, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Zoom +")
+                }
+            }
+            if (errorMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = errorMessage,
+                    color = StatusDanger,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (statusMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Respons API (belum memastikan kamera bergerak): $statusMessage",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PtzControlButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(Color(0xFFF1F5F9))
+    ) {
+        Icon(icon, contentDescription = description, tint = TextPrimary)
+    }
+}
+
+@Composable
+private fun MicrophoneTalkPanel(
+    hasPermission: Boolean,
+    isCapturing: Boolean,
+    audioLevel: Float,
+    errorMessage: String?,
+    onToggleCapture: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Bicara ke Kamera",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+            Text(
+                text = "Tes mikrofon lokal. Suara belum dikirim ke kamera karena backend talk belum tersedia.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
+            Button(
+                onClick = onToggleCapture,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isCapturing) StatusDanger else PrimaryBlue
+                )
+            ) {
+                Icon(
+                    imageVector = if (isCapturing) Icons.Default.MicOff else Icons.Default.Mic,
+                    contentDescription = null
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    when {
+                        isCapturing -> "Hentikan tes mikrofon"
+                        hasPermission -> "Mulai tes mikrofon"
+                        else -> "Izinkan mikrofon"
+                    }
+                )
+            }
+            if (isCapturing) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(BorderSubtle)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(audioLevel)
+                            .fillMaxHeight()
+                            .background(PrimaryBlue)
+                    )
+                }
+            }
+            if (errorMessage != null) {
+                Text(errorMessage, color = StatusDanger, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 

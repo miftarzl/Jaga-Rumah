@@ -35,6 +35,10 @@ Dokumen ini menjelaskan arsitektur dan langkah konfigurasi infrastruktur streami
    └─ Memutar video WebRTC / RTSP tanpa perlu instalasi aplikasi VPN di HP pengguna!
 ```
 
+## Batasan Audio Dua Arah
+
+Konfigurasi RTSP source, WHEP, dan HLS di atas mengirim stream dari kamera ke aplikasi; jalur tersebut belum mengirim mikrofon HP kembali ke speaker kamera. Fondasi Android hanya menguji mikrofon secara lokal. Fitur bicara dua arah baru dapat diaktifkan setelah backend menyediakan signaling dan transport audio balik yang terautentikasi untuk kamera.
+
 ---
 
 ## 1. Konfigurasi Tapo C500 (Akun Kamera)

@@ -46,6 +46,22 @@ data class UpdateCameraSettingsRequest(
     @SerializedName("notification_enabled") val notificationEnabled: Boolean
 )
 
+enum class PtzDirection {
+    @SerializedName("up") UP,
+    @SerializedName("down") DOWN,
+    @SerializedName("left") LEFT,
+    @SerializedName("right") RIGHT,
+    @SerializedName("zoom_in") ZOOM_IN,
+    @SerializedName("zoom_out") ZOOM_OUT,
+    @SerializedName("stop") STOP
+}
+
+data class PtzControlRequest(
+    @SerializedName("direction") val direction: PtzDirection,
+    @SerializedName("speed") val speed: Float = 0.5f,
+    @SerializedName("duration_ms") val durationMs: Int = 400
+)
+
 data class TriggerSosRequest(
     @SerializedName("latitude") val latitude: Double? = null,
     @SerializedName("longitude") val longitude: Double? = null,

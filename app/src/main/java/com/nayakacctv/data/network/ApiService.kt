@@ -70,6 +70,12 @@ interface ApiService {
         @Path("id") id: String
     ): Response<ApiResponse<CameraStream>>
 
+    @POST("mobile/cameras/{id}/ptz")
+    suspend fun controlCameraPtz(
+        @Path("id") id: String,
+        @Body request: PtzControlRequest
+    ): Response<ResponseBody>
+
     @POST("mobile/devices/claim")
     suspend fun claimDevice(
         @Body request: ClaimDeviceRequest
