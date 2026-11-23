@@ -377,11 +377,17 @@ fun LiveViewScreen(
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
+                        Text(
+                            text = "Perintah gerak belum didukung oleh API backend.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted
+                        )
                         Spacer(modifier = Modifier.height(14.dp))
 
                         // Up
                         IconButton(
-                            onClick = { Toast.makeText(context, "Arahkan kamera ke Atas", Toast.LENGTH_SHORT).show() },
+                            onClick = {},
+                            enabled = false,
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
@@ -396,7 +402,8 @@ fun LiveViewScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
-                                onClick = { Toast.makeText(context, "Arahkan kamera ke Kiri", Toast.LENGTH_SHORT).show() },
+                                onClick = {},
+                                enabled = false,
                                 modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
@@ -416,7 +423,8 @@ fun LiveViewScreen(
                             }
 
                             IconButton(
-                                onClick = { Toast.makeText(context, "Arahkan kamera ke Kanan", Toast.LENGTH_SHORT).show() },
+                                onClick = {},
+                                enabled = false,
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
@@ -428,7 +436,8 @@ fun LiveViewScreen(
 
                         // Down
                         IconButton(
-                            onClick = { Toast.makeText(context, "Arahkan kamera ke Bawah", Toast.LENGTH_SHORT).show() },
+                            onClick = {},
+                            enabled = false,
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)

@@ -32,8 +32,11 @@ import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.components.NayakaTopAppBar
 import com.nayakacctv.ui.theme.*
 import com.nayakacctv.ui.utils.Formatters
+import com.nayakacctv.ui.utils.StreamRecorder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -50,23 +53,20 @@ fun PlaybackDetailScreen(
     var totalDuration by remember { mutableLongStateOf(0L) }
     var speed by remember { mutableFloatStateOf(1f) }
     var isScrubbing by remember { mutableStateOf(false) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var loadError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(recordingId) {
-        coroutineScope.launch {
-            val res = repository.getRecordingDetail(recordingId)
-            val rec = res.getOrNull() ?: repository.getRecordings().getOrDefault(emptyList()).find { it.id == recordingId }
-            recording = rec ?: Recording(
-                id = recordingId,
-                cameraId = "cam-1",
-                cameraName = "Kamera Depan",
-                title = "Rekaman Kejadian #$recordingId",
-                startedAt = "2026-11-17T14:00:00Z",
-                duration = 300,
-                sizeBytes = 15400000,
-                hasMotion = true
-            )
-            totalDuration = (recording?.duration ?: 0L).takeIf { it > 0 } ?: 10L
+        val result = repository.getRecordingDetail(recordingId)
+        recording = result.getOrNull()
+        loadError = result.exceptionOrNull()?.let { error ->
+            if (error.message.orEmpty().contains("404")) {
+                "Rekaman sudah tidak tersedia. Rekaman otomatis dihapus setelah 24 jam."
+            } else {
+                error.localizedMessage ?: "Gagal memuat rekaman."
+            }
         }
+        totalDuration = (recording?.duration ?: 0L).takeIf { it > 0 } ?: 1L
     }
 
     val playbackUrl = recording?.playbackUrl
@@ -164,6 +164,13 @@ fun PlaybackDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+        if (loadError != null) {
+            Text(
+                text = loadError.orEmpty(),
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                color = StatusDanger
+            )
+        }
             // Player Video Container
             Box(
                 modifier = Modifier
@@ -373,11 +380,36 @@ fun PlaybackDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Button(
+                            enabled = !isDownloading,
                             onClick = {
-                                if (playbackUrl != null && (playbackUrl.startsWith("/") || playbackUrl.startsWith("file://"))) {
+                                if (playbackUrl.isNullOrBlank()) {
+                                    Toast.makeText(context, "URL rekaman tidak tersedia.", Toast.LENGTH_SHORT).show()
+                                } else if (playbackUrl.startsWith("/") || playbackUrl.startsWith("file://")) {
                                     Toast.makeText(context, "Berkas video sudah tersimpan di Galeri & Movies/NayakaCCTV", Toast.LENGTH_LONG).show()
                                 } else {
-                                    Toast.makeText(context, "Mengunduh berkas rekaman ke galeri...", Toast.LENGTH_SHORT).show()
+                                    isDownloading = true
+                                    coroutineScope.launch {
+                                        val result = repository.downloadRecording(recordingId)
+                                        result.onSuccess { body ->
+                                            val saved = withContext(Dispatchers.IO) {
+                                                body.byteStream().use {
+                                                    StreamRecorder.saveVideoStreamToGallery(
+                                                        context,
+                                                        it,
+                                                        "NAYAKA_REC_${recordingId}.mp4"
+                                                    )
+                                                }
+                                            }
+                                            saved.onSuccess {
+                                                Toast.makeText(context, "Video berhasil disimpan ke Galeri / Movies/NayakaCCTV.", Toast.LENGTH_LONG).show()
+                                            }.onFailure {
+                                                Toast.makeText(context, it.localizedMessage ?: "Gagal menyimpan video.", Toast.LENGTH_LONG).show()
+                                            }
+                                        }.onFailure {
+                                            Toast.makeText(context, it.localizedMessage ?: "Gagal mengunduh rekaman.", Toast.LENGTH_LONG).show()
+                                        }
+                                        isDownloading = false
+                                    }
                                 }
                             },
                             modifier = Modifier.weight(1f),
@@ -386,10 +418,11 @@ fun PlaybackDetailScreen(
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Unduh Video", fontSize = 13.sp)
+                            Text(if (isDownloading) "Mengunduh..." else "Unduh Video", fontSize = 13.sp)
                         }
 
                         Button(
+                            enabled = !isDownloading,
                             onClick = {
                                 try {
                                     if (playbackUrl != null && (playbackUrl.startsWith("/") || playbackUrl.startsWith("file://"))) {
@@ -409,13 +442,38 @@ fun PlaybackDetailScreen(
                                             context.startActivity(Intent.createChooser(shareIntent, "Bagikan Rekaman CCTV"))
                                             return@Button
                                         }
+                                    } else if (!playbackUrl.isNullOrBlank()) {
+                                        isDownloading = true
+                                        coroutineScope.launch {
+                                            val result = repository.downloadRecording(recordingId)
+                                            result.onSuccess { body ->
+                                                val saved = withContext(Dispatchers.IO) {
+                                                    body.byteStream().use {
+                                                        StreamRecorder.saveVideoStreamToGallery(
+                                                            context,
+                                                            it,
+                                                            "NAYAKA_REC_${recordingId}.mp4"
+                                                        )
+                                                    }
+                                                }
+                                                saved.onSuccess { uri ->
+                                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                        type = "video/mp4"
+                                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                    }
+                                                    context.startActivity(Intent.createChooser(shareIntent, "Bagikan Rekaman CCTV"))
+                                                }.onFailure {
+                                                    Toast.makeText(context, it.localizedMessage ?: "Gagal menyiapkan video.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }.onFailure {
+                                                Toast.makeText(context, it.localizedMessage ?: "Gagal mengunduh rekaman.", Toast.LENGTH_SHORT).show()
+                                            }
+                                            isDownloading = false
+                                        }
+                                        return@Button
                                     }
-                                    // Fallback plain share
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, "Rekaman CCTV: ${rec?.title} (${playbackUrl ?: ""})")
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Bagikan Rekaman"))
+                                    Toast.makeText(context, "URL rekaman tidak tersedia.", Toast.LENGTH_SHORT).show()
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Gagal membagikan rekaman: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }

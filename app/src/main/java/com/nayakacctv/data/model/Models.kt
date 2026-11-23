@@ -128,6 +128,7 @@ data class Recording(
     @SerializedName("duration_seconds") val durationSeconds: Long? = null,
     @SerializedName("duration") val duration: Long = 0,
     @SerializedName("size_bytes") val sizeBytes: Long = 0,
+    @SerializedName("file_size_bytes") val fileSizeBytes: Long? = null,
     @SerializedName("status") val status: String = "available",
     @SerializedName("has_motion") val hasMotion: Boolean = false,
     @SerializedName("thumbnail_url") val thumbnailUrl: String? = null,

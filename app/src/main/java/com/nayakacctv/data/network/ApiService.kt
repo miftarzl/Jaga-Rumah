@@ -1,7 +1,9 @@
 package com.nayakacctv.data.network
 
 import com.nayakacctv.data.model.*
+import okhttp3.ResponseBody
 import retrofit2.Response
+import retrofit2.http.Streaming
 import retrofit2.http.*
 
 interface ApiService {
@@ -79,13 +81,30 @@ interface ApiService {
         @Query("camera_id") cameraId: String? = null,
         @Query("from") fromDate: String? = null,
         @Query("to") toDate: String? = null,
-        @Query("limit") limit: Int = 50
+        @Query("limit") limit: Int = 20,
+        @Query("cursor") cursor: String? = null
     ): Response<ApiResponse<RecordingListResponse>>
 
     @GET("mobile/recordings/{id}")
     suspend fun getRecordingDetail(
         @Path("id") id: String
     ): Response<ApiResponse<RecordingDetailResponse>>
+
+    @Streaming
+    @GET("recordings/{id}/stream")
+    suspend fun downloadRecording(
+        @Path("id") id: String
+    ): Response<ResponseBody>
+
+    @Streaming
+    @Headers("Accept: video/mp4")
+    @GET("mobile/cameras/{id}/clip")
+    suspend fun downloadRecordingClip(
+        @Path("id") cameraId: String,
+        @Query("from") from: String,
+        @Query("to") to: String,
+        @Query("download") download: Int = 1
+    ): Response<ResponseBody>
 
     // ── Alerts ──────────────────────────────────────────────────────────
     @GET("mobile/alerts")

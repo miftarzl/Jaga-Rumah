@@ -8,7 +8,10 @@ import com.nayakacctv.data.network.ApiService
 import com.nayakacctv.ui.utils.BiometricHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ResponseBody
 import retrofit2.Response
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class NayakaRepository(
     private val api: ApiService,
@@ -215,20 +218,61 @@ class NayakaRepository(
         }
         return recordingsCache.getOrLoad(key = cacheKey, forceRefresh = forceRefresh) {
             val localList = tokenManager.getLocalRecordings().filter { r ->
-                cameraId == null || r.cameraId == cameraId
+                (cameraId == null || r.cameraId == cameraId) &&
+                    isWithinRange(r.startedAt, from, to)
             }
-            val remoteRes = safeApiCall { api.getRecordings(cameraId, from, to) }
-            remoteRes.map { res ->
-                val remoteList = res.recordings.map { r ->
-                    r.copy(
-                        duration = if (r.duration > 0) r.duration else (r.durationSeconds ?: 0L),
-                        cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: "")
-                    )
+            val remoteRecordings = mutableListOf<Recording>()
+            val seenCursors = mutableSetOf<String>()
+            var cursor: String? = null
+            var pageCount = 0
+            var paginationError: Throwable? = null
+            var hasMore = true
+
+            while (hasMore && pageCount < 100) {
+                val pageResult = safeApiCall {
+                    api.getRecordings(cameraId, from, to, limit = 20, cursor = cursor)
                 }
-                (localList + remoteList).distinctBy { it.id }
-            }.recoverCatching { error ->
-                if (localList.isNotEmpty()) localList else throw error
+                if (pageResult.isFailure) {
+                    paginationError = pageResult.exceptionOrNull()
+                    break
+                }
+                val page = pageResult.getOrThrow()
+                remoteRecordings += page.recordings
+                val nextCursor = page.pagination?.nextCursor
+                if (page.pagination?.hasMore == true) {
+                    if (nextCursor.isNullOrBlank() || !seenCursors.add(nextCursor)) {
+                        paginationError = Exception("Cursor halaman rekaman dari server tidak valid.")
+                        hasMore = false
+                    } else {
+                        cursor = nextCursor
+                    }
+                } else {
+                    hasMore = false
+                }
+                pageCount++
             }
+
+            if (hasMore && paginationError == null) {
+                paginationError = Exception("Terlalu banyak halaman rekaman untuk dimuat.")
+            }
+            if (paginationError != null) {
+                return@getOrLoad if (localList.isNotEmpty()) {
+                    Result.success(localList)
+                } else {
+                    Result.failure(paginationError!!)
+                }
+            }
+
+            val remoteList = remoteRecordings.map { r ->
+                r.copy(
+                    duration = if (r.duration > 0) r.duration else (r.durationSeconds ?: 0L),
+                    cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: ""),
+                    sizeBytes = if (r.sizeBytes > 0) r.sizeBytes else (r.fileSizeBytes ?: 0L)
+                )
+            }
+            Result.success((localList + remoteList).distinctBy { it.id }.sortedByDescending {
+                parseIsoTimestamp(it.startedAt) ?: 0L
+            })
         }
     }
 
@@ -241,9 +285,107 @@ class NayakaRepository(
             val r = res.recording ?: throw Exception("Rekaman tidak ditemukan")
             r.copy(
                 duration = if (r.duration > 0) r.duration else (r.durationSeconds ?: 0L),
-                cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: "")
+                cameraId = if (r.cameraId.isNotBlank()) r.cameraId else (r.deviceId ?: ""),
+                sizeBytes = if (r.sizeBytes > 0) r.sizeBytes else (r.fileSizeBytes ?: 0L)
             )
         }
+    }
+
+    suspend fun downloadRecording(id: String): Result<ResponseBody> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.downloadRecording(id)
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body != null) Result.success(body)
+                else Result.failure(Exception("Data video kosong dari server"))
+            } else {
+                response.errorBody()?.close()
+                Result.failure(Exception("Gagal mengunduh rekaman (${response.code()})"))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(e.localizedMessage ?: "Gagal mengunduh rekaman"))
+        }
+    }
+
+    suspend fun downloadRecordingClip(
+        cameraId: String,
+        from: String,
+        to: String
+    ): Result<ResponseBody> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.downloadRecordingClip(cameraId, from, to)
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body == null) {
+                    Result.failure(Exception("Data klip kosong dari server"))
+                } else {
+                    val contentType = body.contentType()?.toString().orEmpty()
+                    if (contentType.startsWith("video/mp4") ||
+                        contentType.startsWith("application/octet-stream")
+                    ) {
+                        Result.success(body)
+                    } else {
+                        val responseText = body.string().take(500)
+                        Result.failure(
+                            Exception(
+                                extractClipErrorMessage(
+                                    responseText,
+                                    "Server mengembalikan format klip yang tidak didukung ($contentType)"
+                                )
+                            )
+                        )
+                    }
+                }
+            } else {
+                val responseText = response.errorBody()?.use { it.string() }.orEmpty()
+                Result.failure(
+                    Exception(
+                        extractClipErrorMessage(
+                            responseText,
+                            "Gagal mengambil klip (${response.code()})"
+                        )
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(e.localizedMessage ?: "Gagal mengambil klip"))
+        }
+    }
+
+    private fun extractClipErrorMessage(responseText: String, fallback: String): String {
+        val apiMessage = try {
+            gson.fromJson(responseText, ApiErrorResponse::class.java)?.error?.message
+        } catch (_: Exception) {
+            null
+        }
+        return apiMessage?.takeIf { it.isNotBlank() }
+            ?: responseText.takeIf { it.isNotBlank() }?.take(500)
+            ?: fallback
+    }
+
+    private fun isWithinRange(value: String, from: String?, to: String?): Boolean {
+        if (from == null && to == null) return true
+        val timestamp = parseIsoTimestamp(value) ?: return false
+        val fromTimestamp = from?.let(::parseIsoTimestamp)
+        val toTimestamp = to?.let(::parseIsoTimestamp)
+        return (fromTimestamp == null || timestamp >= fromTimestamp) &&
+            (toTimestamp == null || timestamp <= toTimestamp)
+    }
+
+    private fun parseIsoTimestamp(value: String): Long? {
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSX",
+            "yyyy-MM-dd'T'HH:mm:ssX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'"
+        )
+        for (pattern in patterns) {
+            val parsed = runCatching {
+                SimpleDateFormat(pattern, Locale.US).parse(value)?.time
+            }.getOrNull()
+            if (parsed != null) return parsed
+        }
+        return null
     }
 
     fun saveLocalRecording(recording: Recording) {

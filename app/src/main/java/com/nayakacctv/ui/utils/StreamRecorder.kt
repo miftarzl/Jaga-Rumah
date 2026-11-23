@@ -16,6 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.*
@@ -406,6 +407,46 @@ object StreamRecorder {
             }
         }
         return null
+    }
+
+    fun saveVideoStreamToGallery(
+        context: Context,
+        input: InputStream,
+        fileName: String
+    ): Result<Uri> {
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Video.Media.TITLE, fileName)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/NayakaCCTV")
+                put(MediaStore.Video.Media.IS_PENDING, 1)
+            }
+        }
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+        val uri = resolver.insert(collection, values)
+            ?: return Result.failure(Exception("Tidak dapat membuat berkas video di Galeri"))
+
+        return try {
+            val output = resolver.openOutputStream(uri)
+                ?: throw Exception("Tidak dapat membuka berkas video di Galeri")
+            output.use { input.copyTo(it) }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val publishedValues = ContentValues().apply {
+                    put(MediaStore.Video.Media.IS_PENDING, 0)
+                }
+                resolver.update(uri, publishedValues, null, null)
+            }
+            Result.success(uri)
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            Result.failure(Exception("Gagal menyimpan video ke Galeri: ${e.localizedMessage}"))
+        }
     }
 
     /**
