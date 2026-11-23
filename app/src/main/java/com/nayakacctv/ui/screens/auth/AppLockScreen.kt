@@ -2,6 +2,7 @@ package com.nayakacctv.ui.screens.auth
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,7 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -186,21 +189,12 @@ fun AppLockScreen(
         ) {
             Spacer(modifier = Modifier.height(36.dp))
 
-            // Icon Gembok Terkunci
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryBlue),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = "Aplikasi Terkunci",
-                    tint = Color.White,
-                    modifier = Modifier.size(38.dp)
-                )
-            }
+            Image(
+                painter = painterResource(id = com.nayakacctv.R.drawable.ic_jaga_rumah_app_icon),
+                contentDescription = "Logo JAGA RUMAH",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(88.dp)
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 

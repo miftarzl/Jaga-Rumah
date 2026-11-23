@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -78,20 +80,12 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(40.dp))
 
         // App Logo
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(PrimaryBlue),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Videocam,
-                contentDescription = "Logo JAGA RUMAH",
-                tint = Color.White,
-                modifier = Modifier.size(40.dp)
-            )
-        }
+        Image(
+            painter = painterResource(id = com.nayakacctv.R.drawable.ic_jaga_rumah_logo),
+            contentDescription = "Logo JAGA RUMAH",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.size(88.dp)
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
         Text(

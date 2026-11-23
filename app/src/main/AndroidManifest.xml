@@ -15,9 +15,9 @@
     <application
         android:name=".NayakaApp"
         android:allowBackup="true"
-        android:icon="@android:drawable/ic_dialog_info"
+        android:icon="@drawable/ic_jaga_rumah_app_icon"
         android:label="@string/app_name"
-        android:roundIcon="@android:drawable/ic_dialog_info"
+        android:roundIcon="@drawable/ic_jaga_rumah_app_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.NayakaCCTV"
         android:usesCleartextTraffic="true"

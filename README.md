@@ -54,7 +54,7 @@ Aplikasi menggunakan pola arsitektur **Clean MVVM (Model-View-ViewModel/Reposito
 
 ```
 [UI Layer / Jetpack Compose]
-   │  Screens: Login, Smart Home Preview, Cameras, LiveView, Playback, Alerts, SOS, Profile
+   │  Screens: Splash, Login, Smart Home Preview, Cameras, LiveView, Playback, Alerts, SOS, Profile
    │  Theme: Colors, Typography, Shapes
    ▼
 [Navigation Layer]
