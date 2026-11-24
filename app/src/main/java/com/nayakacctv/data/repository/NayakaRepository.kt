@@ -514,6 +514,72 @@ class NayakaRepository(
     suspend fun getAlertDetail(id: String): Result<AlertItem> =
         safeApiCall { api.getAlertDetail(id) }.mapCatching { it.alert ?: throw Exception("Notifikasi tidak ditemukan") }
 
+    suspend fun downloadAlertSnapshot(id: String, destination: File): Result<File> =
+        downloadAlertEvidence(destination, "snapshot", "image/") {
+            api.getAlertSnapshot(id)
+        }
+
+    suspend fun downloadAlertClip(id: String, destination: File): Result<File> =
+        downloadAlertEvidence(destination, "video", "video/mp4") {
+            api.getAlertClip(id, download = 1)
+        }
+
+    private suspend fun downloadAlertEvidence(
+        destination: File,
+        evidenceName: String,
+        expectedContentType: String,
+        request: suspend () -> Response<ResponseBody>
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val response = request()
+            if (!response.isSuccessful) {
+                response.errorBody()?.close()
+                destination.delete()
+                return@withContext Result.failure(
+                    Exception("Gagal memuat $evidenceName bukti (HTTP ${response.code()})")
+                )
+            }
+
+            val body = response.body()
+            if (body == null) {
+                destination.delete()
+                return@withContext Result.failure(
+                    Exception("$evidenceName bukti kosong dari server")
+                )
+            }
+            val contentType = body.contentType()?.toString().orEmpty()
+            if (!contentType.startsWith(expectedContentType) &&
+                !contentType.startsWith("application/octet-stream")
+            ) {
+                body.close()
+                destination.delete()
+                return@withContext Result.failure(
+                    Exception("Format $evidenceName bukti tidak didukung ($contentType)")
+                )
+            }
+
+            body.use { responseBody ->
+                destination.outputStream().use { output ->
+                    responseBody.byteStream().copyTo(output)
+                }
+            }
+            if (destination.length() == 0L) {
+                destination.delete()
+                Result.failure(Exception("$evidenceName bukti kosong dari server"))
+            } else {
+                Result.success(destination)
+            }
+        } catch (e: CancellationException) {
+            destination.delete()
+            throw e
+        } catch (e: Exception) {
+            destination.delete()
+            Result.failure(
+                Exception(e.localizedMessage ?: "Gagal mengunduh $evidenceName bukti")
+            )
+        }
+    }
+
     suspend fun registerPushToken(token: String, permission: String = "granted"): Result<Boolean> =
         safeApiCall {
             api.registerPushToken(

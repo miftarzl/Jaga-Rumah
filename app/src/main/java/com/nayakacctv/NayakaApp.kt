@@ -4,6 +4,8 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.nayakacctv.data.local.TokenManager
 import com.nayakacctv.data.network.NetworkClient
 import com.nayakacctv.data.repository.NayakaRepository
@@ -13,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class NayakaApp : Application() {
+class NayakaApp : Application(), ImageLoaderFactory {
     private val pushScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     lateinit var tokenManager: TokenManager
@@ -29,6 +31,11 @@ class NayakaApp : Application() {
         repository = NayakaRepository(apiService, tokenManager)
         createNotificationChannel()
     }
+
+    override fun newImageLoader(): ImageLoader =
+        ImageLoader.Builder(this)
+            .okHttpClient(NetworkClient.getAuthenticatedOkHttpClient(this))
+            .build()
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

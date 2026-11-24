@@ -335,6 +335,12 @@ fun AlertItemCard(
     alert: AlertItem,
     onClick: () -> Unit
 ) {
+    val snapshotPath = alert.thumbnailUrl
+        ?.trim()
+        ?.takeIf(String::isNotBlank)
+        ?: alert.id.takeIf(String::isNotBlank)
+            ?.let { "/api/v1/mobile/alerts/$it/snapshot" }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -351,10 +357,8 @@ fun AlertItemCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.Top
         ) {
-            alert.thumbnailUrl
-                ?.trim()
-                ?.takeIf(String::isNotBlank)
-                ?.let { resolveAlertThumbnailUrl(it) }
+            snapshotPath
+                ?.let(NetworkClient::resolveUrl)
                 ?.let { thumbnailUrl ->
                     AsyncImage(
                         model = thumbnailUrl,
@@ -431,13 +435,6 @@ fun AlertItemCard(
         }
     }
 }
-
-private fun resolveAlertThumbnailUrl(url: String): String =
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-        url
-    } else {
-        NetworkClient.BASE_URL.trimEnd('/') + "/" + url.trimStart('/')
-    }
 
 @Composable
 fun OrDivider(modifier: Modifier = Modifier) {

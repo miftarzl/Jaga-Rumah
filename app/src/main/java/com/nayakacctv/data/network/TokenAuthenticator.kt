@@ -9,6 +9,7 @@ import com.nayakacctv.data.model.RefreshTokenRequest
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 class TokenAuthenticator(
     private val tokenManager: TokenManager,
@@ -16,8 +17,17 @@ class TokenAuthenticator(
 ) : Authenticator {
 
     private val gson = Gson()
+    private val apiBaseUrl = baseUrl.toHttpUrl()
 
     override fun authenticate(route: Route?, response: Response): Request? {
+        val requestUrl = response.request.url
+        if (requestUrl.scheme != apiBaseUrl.scheme ||
+            requestUrl.host != apiBaseUrl.host ||
+            requestUrl.port != apiBaseUrl.port
+        ) {
+            return null
+        }
+
         // Prevent infinite loops if refresh endpoint itself failed
         if (response.request.url.encodedPath.contains("auth/refresh") ||
             response.request.url.encodedPath.contains("auth/login")) {
