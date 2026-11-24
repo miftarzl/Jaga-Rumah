@@ -2,15 +2,20 @@ package com.nayakacctv.ui.navigation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.screens.auth.AppLockScreen
@@ -20,6 +25,7 @@ import com.nayakacctv.ui.screens.auth.RegisterScreen
 import com.nayakacctv.ui.screens.auth.ResetPasswordScreen
 import com.nayakacctv.ui.screens.cameras.CameraDetailScreen
 import com.nayakacctv.ui.screens.cameras.LiveViewScreen
+import com.nayakacctv.ui.screens.alerts.AlertSettingsScreen
 import com.nayakacctv.ui.screens.emergency.EmergencyScreen
 import com.nayakacctv.ui.screens.help.HelpScreen
 import com.nayakacctv.ui.screens.help.TermsScreen
@@ -37,6 +43,8 @@ fun AppNavHost(
     val coroutineScope = rememberCoroutineScope()
     val isLocked by AppLockManager.isLockedState.collectAsState()
     val isLoggedIn = repository.isLoggedIn()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    var selectedTabRoute by rememberSaveable { mutableStateOf(BottomTab.Dashboard.route) }
 
     val startDestination = if (isLoggedIn) Screen.MainTabs.route else Screen.Login.route
 
@@ -118,6 +126,9 @@ fun AppNavHost(
                     onNavigateToPlaybackDetail = { id ->
                         navController.navigate(Screen.PlaybackDetail.createRoute(id))
                     },
+                    onNavigateToAlertSettings = {
+                        navController.navigate(Screen.AlertSettings.route)
+                    },
                     onNavigateToEmergency = {
                         navController.navigate(Screen.Emergency.route)
                     },
@@ -135,7 +146,9 @@ fun AppNavHost(
                         navController.navigate(Screen.Login.route) {
                             popUpTo(Screen.MainTabs.route) { inclusive = true }
                         }
-                    }
+                    },
+                    selectedTabRoute = selectedTabRoute,
+                    onSelectedTabRouteChange = { selectedTabRoute = it }
                 )
             }
 
@@ -177,6 +190,13 @@ fun AppNavHost(
                 val recordingId = backStackEntry.arguments?.getString("recordingId") ?: ""
                 PlaybackDetailScreen(
                     recordingId = recordingId,
+                    repository = repository,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.AlertSettings.route) {
+                AlertSettingsScreen(
                     repository = repository,
                     onNavigateBack = { navController.popBackStack() }
                 )
@@ -230,6 +250,19 @@ fun AppNavHost(
                     }
                 }
             )
+        }
+
+        BackHandler(
+            enabled = !isLocked &&
+                backStackEntry?.destination?.route == Screen.MainTabs.route &&
+                selectedTabRoute != BottomTab.Dashboard.route
+        ) {
+            selectedTabRoute = when (selectedTabRoute) {
+                BottomTab.Playback.route,
+                BottomTab.Alerts.route,
+                BottomTab.Profile.route -> BottomTab.More.route
+                else -> BottomTab.Dashboard.route
+            }
         }
     }
 }

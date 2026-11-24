@@ -226,6 +226,7 @@ fun SmartHomeAutomationScreen() {
 fun SmartHomeMoreScreen(
     onNavigateToPlayback: () -> Unit,
     onNavigateToAlerts: () -> Unit,
+    onNavigateToAlertSettings: () -> Unit,
     onNavigateToProfile: () -> Unit
 ) {
     Scaffold(containerColor = BackgroundSlate) { padding ->
@@ -268,6 +269,14 @@ fun SmartHomeMoreScreen(
                         PreviewTag()
                     }
                 }
+            }
+            item {
+                MoreActionCard(
+                    icon = Icons.Default.Notifications,
+                    title = "Pengaturan Alert",
+                    subtitle = "Atur alert tiap kamera dan jadwal Sleep Mode",
+                    onClick = onNavigateToAlertSettings
+                )
             }
             item {
                 MoreActionCard(

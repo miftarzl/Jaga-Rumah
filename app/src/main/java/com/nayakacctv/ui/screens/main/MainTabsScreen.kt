@@ -6,7 +6,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -31,11 +30,14 @@ fun MainTabsScreen(
     onNavigateToCameraDetail: (String) -> Unit,
     onNavigateToLiveView: (String) -> Unit,
     onNavigateToPlaybackDetail: (String) -> Unit,
+    onNavigateToAlertSettings: () -> Unit,
     onNavigateToEmergency: () -> Unit,
     onNavigateToSubscription: () -> Unit,
     onNavigateToHelp: () -> Unit,
     onNavigateToTerms: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    selectedTabRoute: String,
+    onSelectedTabRouteChange: (String) -> Unit
 ) {
     val tabs = listOf(
         BottomTab.Dashboard,
@@ -44,7 +46,6 @@ fun MainTabsScreen(
         BottomTab.Automation,
         BottomTab.More
     )
-    var selectedTabRoute by rememberSaveable { mutableStateOf(BottomTab.Dashboard.route) }
     val selectedTab = tabs.firstOrNull { it.route == selectedTabRoute }
         ?: if (
             selectedTabRoute == BottomTab.Playback.route ||
@@ -66,7 +67,7 @@ fun MainTabsScreen(
                     val isSelected = selectedTab == tab
                     NavigationBarItem(
                         selected = isSelected,
-                        onClick = { selectedTabRoute = tab.route },
+                        onClick = { onSelectedTabRouteChange(tab.route) },
                         icon = {
                             Icon(
                                 imageVector = when (tab) {
@@ -106,9 +107,9 @@ fun MainTabsScreen(
                     onNavigateToCameraDetail = onNavigateToCameraDetail,
                     onNavigateToLiveView = onNavigateToLiveView,
                     onNavigateToEmergency = onNavigateToEmergency,
-                    onNavigateToAlerts = { selectedTabRoute = BottomTab.Alerts.route },
-                    onNavigateToDevices = { selectedTabRoute = BottomTab.Devices.route },
-                    onNavigateToAutomation = { selectedTabRoute = BottomTab.Automation.route }
+                    onNavigateToAlerts = { onSelectedTabRouteChange(BottomTab.Alerts.route) },
+                    onNavigateToDevices = { onSelectedTabRouteChange(BottomTab.Devices.route) },
+                    onNavigateToAutomation = { onSelectedTabRouteChange(BottomTab.Automation.route) }
                 )
                 BottomTab.Devices.route -> SmartHomeDevicesScreen()
                 BottomTab.Cameras.route -> CamerasScreen(
@@ -118,9 +119,10 @@ fun MainTabsScreen(
                 )
                 BottomTab.Automation.route -> SmartHomeAutomationScreen()
                 BottomTab.More.route -> SmartHomeMoreScreen(
-                    onNavigateToPlayback = { selectedTabRoute = BottomTab.Playback.route },
-                    onNavigateToAlerts = { selectedTabRoute = BottomTab.Alerts.route },
-                    onNavigateToProfile = { selectedTabRoute = BottomTab.Profile.route }
+                    onNavigateToPlayback = { onSelectedTabRouteChange(BottomTab.Playback.route) },
+                    onNavigateToAlerts = { onSelectedTabRouteChange(BottomTab.Alerts.route) },
+                    onNavigateToAlertSettings = onNavigateToAlertSettings,
+                    onNavigateToProfile = { onSelectedTabRouteChange(BottomTab.Profile.route) }
                 )
                 BottomTab.Playback.route -> PlaybackScreen(
                     repository = repository,

@@ -18,6 +18,7 @@ sealed class Screen(val route: String) {
     object PlaybackDetail : Screen("playback_detail/{recordingId}") {
         fun createRoute(recordingId: String) = "playback_detail/$recordingId"
     }
+    object AlertSettings : Screen("alert_settings")
     object Emergency : Screen("emergency")
     object Subscription : Screen("subscription")
     object Help : Screen("help")
