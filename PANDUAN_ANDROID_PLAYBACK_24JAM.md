@@ -119,8 +119,9 @@ audio=@rekaman_mic.m4a (atau .wav / .aac, maksimal 5 MB)
 - **Batas arah joystick**: Kontrak endpoint saat ini hanya menerima `up`, `down`, `left`, dan `right`; joystick memilih arah terdekat dari empat arah tersebut. Sudut diagonal bebas memerlukan dukungan vektor pan/tilt di backend.
 - **Stream saat PTZ**: Pemutar mencoba menyambungkan ulang secara otomatis jika stream kamera terputus sesaat selama kamera bergerak.
 - **Audio Kamera → HP**: Tombol mute mengatur volume ExoPlayer.
-- **Audio HP → Speaker Kamera**: Tombol push-to-talk meminta izin mikrofon, merekam `.m4a` ketika ditekan, lalu mengunggah field `audio` ke endpoint `/api/v1/mobile/cameras/{camera_id}/talk` saat dilepas. Audio live kamera dimute selama proses rekam dan unggah.
+- **Audio HP → Speaker Kamera**: Tombol push-to-talk meminta izin mikrofon, merekam `.m4a` AAC mono 16 kHz/32 kbps ketika ditekan, lalu mengunggah field `audio` ke endpoint `/api/v1/mobile/cameras/{camera_id}/talk` saat dilepas. Audio live kamera dimute selama proses rekam dan unggah.
 - File harus berukuran maksimal 5 MB. Backend mengonversi audio ke G.711 (8 kHz mono) dan memutarnya lewat worker `pytapo`; pemutaran fisik tetap bergantung pada worker dan konfigurasi kamera di backend.
+- Endpoint saat ini mengunggah satu file setelah tombol dilepas, jadi waktu tunggu juga mencakup upload, konversi, dan antrean pemutaran backend. Percakapan live tanpa jeda memerlukan transport audio streaming dua arah, bukan upload file.
 
 ### 5. Shortcut dari `LiveViewScreen.kt` & Penanganan Retensi 24 Jam
 - *(Opsional)* Tambahkan tombol **"Riwayat Rekaman"** di `LiveViewScreen.kt` yang langsung membuka `PlaybackScreen` terfilter untuk kamera tersebut.

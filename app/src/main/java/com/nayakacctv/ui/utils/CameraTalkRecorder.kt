@@ -26,7 +26,7 @@ class CameraTalkRecorder {
             mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             mediaRecorder.setAudioSamplingRate(16_000)
-            mediaRecorder.setAudioEncodingBitRate(64_000)
+            mediaRecorder.setAudioEncodingBitRate(32_000)
             mediaRecorder.setOutputFile(file.absolutePath)
             mediaRecorder.prepare()
             mediaRecorder.start()

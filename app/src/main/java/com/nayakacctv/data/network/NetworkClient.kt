@@ -24,7 +24,7 @@ object NetworkClient {
         val tokenManager = TokenManager(context)
 
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.BASIC
         }
 
         val okHttpClient = OkHttpClient.Builder()
