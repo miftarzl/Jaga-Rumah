@@ -101,6 +101,7 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.exoplayer.rtsp)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.webrtc.android)
 
     // Google Sign-In & Credential Manager
     implementation(libs.play.services.auth)

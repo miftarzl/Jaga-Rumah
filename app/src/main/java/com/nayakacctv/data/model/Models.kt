@@ -109,11 +109,14 @@ data class CameraStream(
     @SerializedName("stream_url") val streamUrl: String? = null,
     @SerializedName("mjpeg_url") val mjpegUrl: String? = null
 ) {
-    val playbackUrl: String?
+    val fallbackUrl: String?
         get() = hlsUrl?.trim()?.takeIf(String::isNotBlank)
             ?: streamUrl?.trim()?.takeIf(String::isNotBlank)
             ?: mjpegUrl?.trim()?.takeIf(String::isNotBlank)
             ?: rtspUrl?.trim()?.takeIf(String::isNotBlank)
+
+    val playbackUrl: String?
+        get() = webRtcUrl?.trim()?.takeIf(String::isNotBlank) ?: fallbackUrl
 }
 
 // ── Recording ──────────────────────────────────────────────────────────

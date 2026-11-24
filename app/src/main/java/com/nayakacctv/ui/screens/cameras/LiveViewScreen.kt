@@ -72,6 +72,7 @@ fun LiveViewScreen(
     var activeCameraId by remember { mutableStateOf(cameraId) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var streamUrl by remember { mutableStateOf<String?>(null) }
+    var fallbackStreamUrl by remember { mutableStateOf<String?>(null) }
     var streamError by remember { mutableStateOf<String?>(null) }
     var allCameras by remember { mutableStateOf<List<Camera>>(emptyList()) }
     var showCameraSwitcher by remember { mutableStateOf(false) }
@@ -207,6 +208,7 @@ fun LiveViewScreen(
     LaunchedEffect(activeCameraId) {
         camera = null
         streamUrl = null
+        fallbackStreamUrl = null
         streamError = null
 
         val cameraRequest = async { repository.getCameraDetail(activeCameraId) }
@@ -215,14 +217,15 @@ fun LiveViewScreen(
         val streamResult = streamRequest.await()
         camera = cameraResult.getOrNull()
         val fetchedStream = streamResult.getOrNull()
-        val activeStreamUrl = fetchedStream?.playbackUrl 
+        val webRtcUrl = fetchedStream?.webRtcUrl?.trim()?.takeIf { it.isNotBlank() }
+        val compatibilityUrl = fetchedStream?.fallbackUrl
             ?: camera?.streamUrl?.takeIf { it.isNotBlank() }
-
-        android.util.Log.i("NAYAKA_STREAM", "getCameraDetail: $cameraResult")
-        android.util.Log.i("NAYAKA_STREAM", "getCameraStream: $streamResult")
-        android.util.Log.i("NAYAKA_STREAM", "activeStreamUrl: $activeStreamUrl, playbackUrl: ${fetchedStream?.playbackUrl}, camStreamUrl: ${camera?.streamUrl}")
-
-        streamUrl = activeStreamUrl
+        streamUrl = webRtcUrl ?: compatibilityUrl
+        fallbackStreamUrl = compatibilityUrl?.takeIf { webRtcUrl != null && it != webRtcUrl }
+        android.util.Log.i(
+            "NAYAKA_STREAM",
+            "Stream resolved: WebRTC=${webRtcUrl != null}, fallback=${fallbackStreamUrl != null}"
+        )
 
         if (streamUrl == null) {
             streamStatus = "Koneksi Terputus"
@@ -311,11 +314,13 @@ fun LiveViewScreen(
                             streamUrl = currentStreamUrl,
                             forceHls = false,
                     isMuted = isMuted,
+                    fallbackStreamUrl = fallbackStreamUrl,
                             controller = streamController,
                             modifier = Modifier.fillMaxSize(),
                             onStateChange = { state ->
                                 streamStatus = when (state) {
                                     "playing" -> "LIVE HD"
+                            "webrtc_playing" -> "LIVE • LOW LATENCY"
                                     "connecting" -> "Menghubungkan..."
                             "reconnecting" -> "Menyambungkan kembali..."
                                     else -> "Koneksi Terputus"

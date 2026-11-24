@@ -169,5 +169,7 @@ Authorization: Bearer <access_token_customer>
 ```
 
 Aplikasi mobile dapat memutar video secara langsung menggunakan:
-* **WebRTC**: Latensi super rendah (< 0.5 detik).
-* **RTSP (ExoPlayer)**: Native Android player menggunakan modul `media3-exoplayer-rtsp`.
+* **WebRTC/WHEP**: Jalur utama berlatensi rendah; hasil aktual bergantung pada kondisi jaringan dan konfigurasi server.
+* **RTSP, HLS, atau MJPEG**: Jalur kompatibilitas jika WebRTC gagal atau tidak tersedia.
+
+Di Android, `webrtc_url` dipakai lebih dulu dan URL kompatibilitas dipakai otomatis jika koneksi WHEP gagal. URL WHEP harus dapat dijangkau HP dan MediaMTX harus mengiklankan alamat publik yang benar. Pastikan port UDP WebRTC MediaMTX (contoh `8189/udp`) terbuka; firewall atau NAT yang memblokir UDP dapat menyebabkan fallback dan delay lebih tinggi.

@@ -56,16 +56,37 @@ fun CameraStreamPlayer(
     modifier: Modifier = Modifier,
     forceHls: Boolean = false,
     isMuted: Boolean = false,
+    fallbackStreamUrl: String? = null,
     controller: CameraStreamController? = null,
     onStateChange: (String) -> Unit = {}
 ) {
-    val uri = remember(streamUrl) { Uri.parse(streamUrl) }
+    var useFallback by remember(streamUrl, fallbackStreamUrl) { mutableStateOf(false) }
+    val fallbackUrl = fallbackStreamUrl?.takeIf { it.isNotBlank() && it != streamUrl }
+    val activeStreamUrl = if (useFallback) fallbackUrl ?: streamUrl else streamUrl
+    val uri = remember(activeStreamUrl) { Uri.parse(activeStreamUrl) }
+    val isWhep = !useFallback && uri.path?.trimEnd('/')?.endsWith("/whep", ignoreCase = true) == true
     val isHls = forceHls || uri.path?.endsWith(".m3u8", ignoreCase = true) == true
     val isNativeVideo = isHls || uri.scheme.equals("rtsp", ignoreCase = true)
 
-    if (isNativeVideo) {
+    if (isWhep) {
+        WebRtcCameraStreamPlayer(
+            streamUrl = activeStreamUrl,
+            modifier = modifier,
+            isMuted = isMuted,
+            controller = controller,
+            onStateChange = onStateChange,
+            onError = {
+                if (fallbackUrl != null) {
+                    useFallback = true
+                    onStateChange("connecting")
+                } else {
+                    onStateChange("error")
+                }
+            }
+        )
+    } else if (isNativeVideo) {
         Media3CameraStreamPlayer(
-            streamUrl = streamUrl,
+            streamUrl = activeStreamUrl,
             forceHls = isHls,
             isMuted = isMuted,
             modifier = modifier,
@@ -74,7 +95,7 @@ fun CameraStreamPlayer(
         )
     } else {
         MjpegStreamView(
-            streamUrl = streamUrl,
+            streamUrl = activeStreamUrl,
             modifier = modifier,
             controller = controller,
             onStateChange = onStateChange
