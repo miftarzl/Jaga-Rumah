@@ -31,6 +31,7 @@ fun MainTabsScreen(
     onNavigateToLiveView: (String) -> Unit,
     onNavigateToPlaybackDetail: (String) -> Unit,
     onNavigateToAlertSettings: () -> Unit,
+    onNavigateToAlertDetail: (String) -> Unit,
     onNavigateToEmergency: () -> Unit,
     onNavigateToSubscription: () -> Unit,
     onNavigateToHelp: () -> Unit,
@@ -129,7 +130,8 @@ fun MainTabsScreen(
                     onNavigateToDetail = onNavigateToPlaybackDetail
                 )
                 BottomTab.Alerts.route -> AlertsScreen(
-                    repository = repository
+                    repository = repository,
+                    onNavigateToDetail = onNavigateToAlertDetail
                 )
                 BottomTab.Profile.route -> ProfileScreen(
                     repository = repository,

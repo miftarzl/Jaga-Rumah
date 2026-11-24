@@ -23,7 +23,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun AlertsScreen(
-    repository: NayakaRepository
+    repository: NayakaRepository,
+    onNavigateToDetail: (String) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var alerts by remember { mutableStateOf<List<AlertItem>>(emptyList()) }
@@ -142,6 +143,7 @@ fun AlertsScreen(
                                         }
                                     }
                                 }
+                                onNavigateToDetail(alert.id)
                             }
                         )
                     }

@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.gms.google-services")
 }
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -102,6 +103,9 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.rtsp)
     implementation(libs.androidx.media3.ui)
     implementation(libs.webrtc.android)
+
+    // Firebase Cloud Messaging
+    implementation("com.google.firebase:firebase-messaging-ktx:24.1.0")
 
     // Google Sign-In & Credential Manager
     implementation(libs.play.services.auth)

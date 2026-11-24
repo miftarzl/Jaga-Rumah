@@ -50,6 +50,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nayakacctv.data.model.Camera
+import com.nayakacctv.data.model.AlertCameraSettingsRequest
+import com.nayakacctv.data.model.AlertSleepModeRequest
 import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.components.NayakaTopAppBar
 import com.nayakacctv.ui.theme.BackgroundSlate
@@ -73,6 +75,7 @@ fun AlertSettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val motionEnabled = remember { mutableStateMapOf<String, Boolean>() }
+    val personEnabled = remember { mutableStateMapOf<String, Boolean>() }
     val notificationsEnabled = remember { mutableStateMapOf<String, Boolean>() }
     val scheduledCameraIds = remember { mutableStateListOf<String>() }
     val selectedDays = remember { mutableStateListOf("Sen", "Sel", "Rab", "Kam", "Jum") }
@@ -85,16 +88,33 @@ fun AlertSettingsScreen(
     var endTime by remember { mutableStateOf("06:00") }
 
     LaunchedEffect(repository) {
-        repository.getCameras(forceRefresh = true)
-            .onSuccess { loadedCameras ->
+        repository.getAlertSettings()
+            .onSuccess { settings ->
+                val loadedCameras = repository.getCameras(forceRefresh = true).getOrDefault(emptyList())
                 cameras = loadedCameras
-                loadedCameras.forEach { camera ->
-                    motionEnabled[camera.id] = true
-                    notificationsEnabled[camera.id] = true
+                settings.cameras.forEach { alertCamera ->
+                    val camera = loadedCameras.firstOrNull { it.id == alertCamera.cameraId }
+                    if (camera != null) {
+                        motionEnabled[camera.id] = alertCamera.motionDetectionEnabled
+                        personEnabled[camera.id] = alertCamera.personDetectionEnabled
+                        notificationsEnabled[camera.id] = alertCamera.notificationsEnabled
+                    }
                 }
+                loadedCameras.forEach { camera ->
+                    motionEnabled[camera.id] = motionEnabled[camera.id] ?: true
+                    personEnabled[camera.id] = personEnabled[camera.id] ?: true
+                    notificationsEnabled[camera.id] = notificationsEnabled[camera.id] ?: true
+                }
+                sleepModeEnabled = settings.sleepMode.enabled
+                startTime = settings.sleepMode.startTime
+                endTime = settings.sleepMode.endTime
+                selectedDays.clear()
+                selectedDays.addAll(settings.sleepMode.activeDays)
+                scheduledCameraIds.clear()
+                scheduledCameraIds.addAll(settings.sleepMode.cameraIds)
             }
             .onFailure { error ->
-                loadError = error.localizedMessage ?: "Gagal memuat daftar kamera."
+                loadError = error.localizedMessage ?: "Gagal memuat pengaturan alert."
             }
         isLoading = false
     }
@@ -132,10 +152,6 @@ fun AlertSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                PreviewAlertNotice()
-            }
-
-            item {
                 SectionTitle(
                     icon = Icons.Default.Security,
                     title = "Pengaturan per kamera",
@@ -168,8 +184,10 @@ fun AlertSettingsScreen(
                     CameraAlertCard(
                         camera = camera,
                         motionEnabled = motionEnabled[camera.id] ?: false,
+                        personEnabled = personEnabled[camera.id] ?: false,
                         notificationsEnabled = notificationsEnabled[camera.id] ?: false,
                         onMotionChanged = { motionEnabled[camera.id] = it },
+                        onPersonChanged = { personEnabled[camera.id] = it },
                         onNotificationsChanged = { notificationsEnabled[camera.id] = it }
                     )
                 }
@@ -211,9 +229,30 @@ fun AlertSettingsScreen(
                 Button(
                     onClick = {
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar(
-                                "Pratinjau UI saja. Pengaturan belum tersimpan atau diterapkan ke kamera."
+                            val cameraSettings = cameras.map { camera ->
+                                AlertCameraSettingsRequest(
+                                    cameraId = camera.id,
+                                    motionDetectionEnabled = motionEnabled[camera.id] ?: true,
+                                    personDetectionEnabled = personEnabled[camera.id] ?: true,
+                                    notificationsEnabled = notificationsEnabled[camera.id] ?: true
+                                )
+                            }
+                            val sleepMode = AlertSleepModeRequest(
+                                enabled = sleepModeEnabled,
+                                startTime = startTime,
+                                endTime = endTime,
+                                activeDays = selectedDays.toList(),
+                                cameraIds = scheduledCameraIds.toList()
                             )
+                            repository.saveAlertSettings(cameraSettings, sleepMode)
+                                .onSuccess {
+                                    snackbarHostState.showSnackbar("Pengaturan alert berhasil disimpan.")
+                                }
+                                .onFailure { error ->
+                                    snackbarHostState.showSnackbar(
+                                        error.localizedMessage ?: "Gagal menyimpan pengaturan alert."
+                                    )
+                                }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -279,8 +318,10 @@ private fun SectionTitle(
 private fun CameraAlertCard(
     camera: Camera,
     motionEnabled: Boolean,
+    personEnabled: Boolean,
     notificationsEnabled: Boolean,
     onMotionChanged: (Boolean) -> Unit,
+    onPersonChanged: (Boolean) -> Unit,
     onNotificationsChanged: (Boolean) -> Unit
 ) {
     Card(
@@ -301,6 +342,13 @@ private fun CameraAlertCard(
                 subtitle = "Mendeteksi aktivitas dari kamera ini.",
                 checked = motionEnabled,
                 onCheckedChange = onMotionChanged
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            SettingSwitchRow(
+                title = "Deteksi orang",
+                subtitle = "Mendeteksi seseorang di area kamera.",
+                checked = personEnabled,
+                onCheckedChange = onPersonChanged
             )
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             SettingSwitchRow(

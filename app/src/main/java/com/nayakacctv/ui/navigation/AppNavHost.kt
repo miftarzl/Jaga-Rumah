@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ import com.nayakacctv.ui.screens.auth.ResetPasswordScreen
 import com.nayakacctv.ui.screens.cameras.CameraDetailScreen
 import com.nayakacctv.ui.screens.cameras.LiveViewScreen
 import com.nayakacctv.ui.screens.alerts.AlertSettingsScreen
+import com.nayakacctv.ui.screens.alerts.AlertDetailScreen
 import com.nayakacctv.ui.screens.emergency.EmergencyScreen
 import com.nayakacctv.ui.screens.help.HelpScreen
 import com.nayakacctv.ui.screens.help.TermsScreen
@@ -38,7 +40,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun AppNavHost(
     navController: NavHostController,
-    repository: NayakaRepository
+    repository: NayakaRepository,
+    initialAlertId: String? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
     val isLocked by AppLockManager.isLockedState.collectAsState()
@@ -47,6 +50,14 @@ fun AppNavHost(
     var selectedTabRoute by rememberSaveable { mutableStateOf(BottomTab.Dashboard.route) }
 
     val startDestination = if (isLoggedIn) Screen.MainTabs.route else Screen.Login.route
+
+    LaunchedEffect(initialAlertId, isLoggedIn) {
+        if (isLoggedIn && !initialAlertId.isNullOrBlank()) {
+            navController.navigate(Screen.AlertDetail.createRoute(initialAlertId)) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
@@ -129,6 +140,9 @@ fun AppNavHost(
                     onNavigateToAlertSettings = {
                         navController.navigate(Screen.AlertSettings.route)
                     },
+                    onNavigateToAlertDetail = { id ->
+                        navController.navigate(Screen.AlertDetail.createRoute(id))
+                    },
                     onNavigateToEmergency = {
                         navController.navigate(Screen.Emergency.route)
                     },
@@ -197,6 +211,18 @@ fun AppNavHost(
 
             composable(Screen.AlertSettings.route) {
                 AlertSettingsScreen(
+                    repository = repository,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Screen.AlertDetail.route,
+                arguments = listOf(navArgument("alertId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val alertId = backStackEntry.arguments?.getString("alertId").orEmpty()
+                AlertDetailScreen(
+                    alertId = alertId,
                     repository = repository,
                     onNavigateBack = { navController.popBackStack() }
                 )

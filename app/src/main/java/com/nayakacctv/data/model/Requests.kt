@@ -70,6 +70,34 @@ data class TriggerSosRequest(
     @SerializedName("message") val message: String = "Panggilan Darurat Dikirim dari Aplikasi Mobile"
 )
 
+data class PushTokenRequest(
+    @SerializedName("installation_id") val installationId: String,
+    @SerializedName("platform") val platform: String = "android",
+    @SerializedName("token") val token: String,
+    @SerializedName("permission") val permission: String = "granted",
+    @SerializedName("app_version") val appVersion: String = "1.0.0"
+)
+
+data class AlertCameraSettingsRequest(
+    @SerializedName("camera_id") val cameraId: String,
+    @SerializedName("motion_detection_enabled") val motionDetectionEnabled: Boolean,
+    @SerializedName("person_detection_enabled") val personDetectionEnabled: Boolean,
+    @SerializedName("notifications_enabled") val notificationsEnabled: Boolean
+)
+
+data class AlertSleepModeRequest(
+    @SerializedName("enabled") val enabled: Boolean,
+    @SerializedName("start_time") val startTime: String,
+    @SerializedName("end_time") val endTime: String,
+    @SerializedName("active_days") val activeDays: List<String>,
+    @SerializedName("camera_ids") val cameraIds: List<String>
+)
+
+data class AlertSettingsRequest(
+    @SerializedName("cameras") val cameras: List<AlertCameraSettingsRequest>,
+    @SerializedName("sleep_mode") val sleepMode: AlertSleepModeRequest
+)
+
 data class ClaimDeviceRequest(
     @SerializedName("code") val code: String
 )

@@ -511,6 +511,29 @@ class NayakaRepository(
     suspend fun markAllAlertsRead(): Result<Boolean> =
         safeApiCall { api.markAllAlertsRead() }.map { true }.onSuccess { alertsCache.clear() }
 
+    suspend fun getAlertDetail(id: String): Result<AlertItem> =
+        safeApiCall { api.getAlertDetail(id) }.mapCatching { it.alert ?: throw Exception("Notifikasi tidak ditemukan") }
+
+    suspend fun registerPushToken(token: String, permission: String = "granted"): Result<Boolean> =
+        safeApiCall {
+            api.registerPushToken(
+                PushTokenRequest(
+                    installationId = tokenManager.getInstallationId(),
+                    token = token,
+                    permission = permission
+                )
+            )
+        }.map { true }
+
+    suspend fun getAlertSettings(): Result<AlertSettingsResponse> =
+        safeApiCall { api.getAlertSettings() }.map { it }
+
+    suspend fun saveAlertSettings(
+        cameras: List<AlertCameraSettingsRequest>,
+        sleepMode: AlertSleepModeRequest
+    ): Result<AlertSettingsResponse> =
+        safeApiCall { api.saveAlertSettings(AlertSettingsRequest(cameras, sleepMode)) }.map { it }
+
     suspend fun getEmergencyContacts(): Result<List<EmergencyContact>> = safeApiCall { api.getEmergencyContacts() }.map { it.contacts }
 
     suspend fun triggerSos(): Result<String> = safeApiCall { api.triggerSos(TriggerSosRequest()) }.map { "Peringatan darurat berhasil dipancarkan." }
@@ -549,6 +572,9 @@ class NayakaRepository(
     suspend fun logout(clearBiometric: Boolean = false) {
         clearDataCaches()
         withContext(Dispatchers.IO) {
+            try {
+                api.deletePushToken(tokenManager.getInstallationId())
+            } catch (_: Exception) {}
             try {
                 api.logout()
             } catch (_: Exception) {}

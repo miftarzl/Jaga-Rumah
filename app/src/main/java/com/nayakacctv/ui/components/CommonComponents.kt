@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.nayakacctv.data.model.AlertItem
 import com.nayakacctv.data.model.Camera
+import com.nayakacctv.data.network.NetworkClient
 import com.nayakacctv.ui.theme.*
 import com.nayakacctv.ui.utils.Formatters
 
@@ -350,6 +351,22 @@ fun AlertItemCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.Top
         ) {
+            alert.thumbnailUrl
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+                ?.let { resolveAlertThumbnailUrl(it) }
+                ?.let { thumbnailUrl ->
+                    AsyncImage(
+                        model = thumbnailUrl,
+                        contentDescription = "Snapshot ${alert.cameraName}",
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
+
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -414,6 +431,13 @@ fun AlertItemCard(
         }
     }
 }
+
+private fun resolveAlertThumbnailUrl(url: String): String =
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+        url
+    } else {
+        NetworkClient.BASE_URL.trimEnd('/') + "/" + url.trimStart('/')
+    }
 
 @Composable
 fun OrDivider(modifier: Modifier = Modifier) {

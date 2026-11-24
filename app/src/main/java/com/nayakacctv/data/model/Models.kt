@@ -157,6 +157,10 @@ data class AlertItem(
     @SerializedName("severity") val severity: String = "info",
     @SerializedName("title") val title: String = "",
     @SerializedName("message") val message: String = "",
+    @SerializedName("thumbnail_url") val thumbnailUrl: String? = null,
+    @SerializedName("clip_url") val clipUrl: String? = null,
+    @SerializedName("clip_duration_seconds") val clipDurationSeconds: Int? = null,
+    @SerializedName("evidence_status") val evidenceStatus: String? = null,
     @SerializedName("occurred_at") val occurredAt: String? = null,
     @SerializedName("time") val time: String = "",
     @SerializedName("is_read") val isRead: Boolean? = null,
@@ -170,6 +174,27 @@ data class AlertListResponse(
 
 data class AlertDetailResponse(
     @SerializedName("alert") val alert: AlertItem? = null
+)
+
+data class AlertCameraSettings(
+    @SerializedName("camera_id") val cameraId: String = "",
+    @SerializedName("camera_name") val cameraName: String = "",
+    @SerializedName("motion_detection_enabled") val motionDetectionEnabled: Boolean = true,
+    @SerializedName("person_detection_enabled") val personDetectionEnabled: Boolean = true,
+    @SerializedName("notifications_enabled") val notificationsEnabled: Boolean = true
+)
+
+data class AlertSleepMode(
+    @SerializedName("enabled") val enabled: Boolean = false,
+    @SerializedName("start_time") val startTime: String = "22:00",
+    @SerializedName("end_time") val endTime: String = "06:00",
+    @SerializedName("active_days") val activeDays: List<String> = emptyList(),
+    @SerializedName("camera_ids") val cameraIds: List<String> = emptyList()
+)
+
+data class AlertSettingsResponse(
+    @SerializedName("cameras") val cameras: List<AlertCameraSettings> = emptyList(),
+    @SerializedName("sleep_mode") val sleepMode: AlertSleepMode = AlertSleepMode()
 )
 
 // ── Dashboard Summary ──────────────────────────────────────────────────

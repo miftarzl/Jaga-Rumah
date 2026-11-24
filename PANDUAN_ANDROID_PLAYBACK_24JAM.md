@@ -132,3 +132,4 @@ audio=@rekaman_mic.m4a (atau .wav / .aac, maksimal 5 MB)
 ## 4. Catatan Teknis Penting
 1. **Timezone**: Semua timestamp API (`started_at`, `ended_at`, `from`, `to`) berformat **UTC (`...Z`)**. Konversikan ke waktu lokal HP saat ditampilkan, dan konversikan kembali ke UTC saat mengirim query `from`/`to`.
 2. **Auth Header**: Endpoint `/api/v1/mobile/cameras/{camera_id}/clip` wajib membawa `Authorization: Bearer <access_token>`, sedangkan `/api/v1/recordings/{recording_id}/stream` bisa langsung diputar ExoPlayer tanpa header tambahan.
+

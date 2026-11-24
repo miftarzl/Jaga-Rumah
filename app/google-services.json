@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1079601430719",
+    "project_id": "nayaka-jagarumah",
+    "storage_bucket": "nayaka-jagarumah.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1079601430719:android:10768ba23309430847860a",
+        "android_client_info": {
+          "package_name": "com.nayakacctv"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1079601430719-ffjslu3k8i9744art61ssqu13rjicshr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZKJyvGX8Vbc9GqZupog057eU9YaQpMxg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1079601430719-ffjslu3k8i9744art61ssqu13rjicshr.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,7 +1,12 @@
 package com.nayakacctv
 
 import android.os.Bundle
+import android.Manifest
+import android.os.Build
+import android.content.pm.PackageManager
 import androidx.activity.compose.setContent
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,12 +19,19 @@ import com.nayakacctv.ui.theme.NayakaCCTVTheme
 import com.nayakacctv.ui.utils.AppLockManager
 
 class MainActivity : FragmentActivity() {
+    companion object {
+        const val EXTRA_ALERT_ID = "alert_id"
+        private const val REQUEST_POST_NOTIFICATIONS = 4101
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val app = application as NayakaApp
         val repository = app.repository
+        app.registerPushToken()
+        requestNotificationPermission()
+        val initialAlertId = intent?.getStringExtra(EXTRA_ALERT_ID)
 
         // Saat aplikasi baru dibuka (cold start), jika pengguna sudah login,
         // kunci aplikasi agar pengguna diminta verifikasi biometrik / password terlebih dahulu (konsep m-banking)
@@ -36,10 +48,25 @@ class MainActivity : FragmentActivity() {
                 } else {
                     AppNavHost(
                         navController = navController,
-                        repository = repository
+                        repository = repository,
+                        initialAlertId = initialAlertId
                     )
                 }
             }
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_POST_NOTIFICATIONS
+            )
         }
     }
 

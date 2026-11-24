@@ -135,6 +135,42 @@ interface ApiService {
     @POST("mobile/alerts/read-all")
     suspend fun markAllAlertsRead(): Response<ApiResponse<Map<String, Any>>>
 
+    @GET("mobile/alerts/{id}")
+    suspend fun getAlertDetail(
+        @Path("id") id: String
+    ): Response<ApiResponse<AlertDetailResponse>>
+
+    @Streaming
+    @GET("mobile/alerts/{id}/snapshot")
+    suspend fun getAlertSnapshot(
+        @Path("id") id: String
+    ): Response<ResponseBody>
+
+    @Streaming
+    @GET("mobile/alerts/{id}/clip")
+    suspend fun getAlertClip(
+        @Path("id") id: String,
+        @Query("download") download: Int? = null
+    ): Response<ResponseBody>
+
+    @POST("mobile/me/push-tokens")
+    suspend fun registerPushToken(
+        @Body request: PushTokenRequest
+    ): Response<ApiResponse<Map<String, Any>>>
+
+    @DELETE("mobile/me/push-tokens/{installationId}")
+    suspend fun deletePushToken(
+        @Path("installationId") installationId: String
+    ): Response<ResponseBody>
+
+    @GET("mobile/alerts/settings")
+    suspend fun getAlertSettings(): Response<ApiResponse<AlertSettingsResponse>>
+
+    @PUT("mobile/alerts/settings")
+    suspend fun saveAlertSettings(
+        @Body request: AlertSettingsRequest
+    ): Response<ApiResponse<AlertSettingsResponse>>
+
     // ── Emergency ───────────────────────────────────────────────────────
     @GET("mobile/emergency-contacts")
     suspend fun getEmergencyContacts(): Response<ApiResponse<EmergencyContactsResponse>>
