@@ -66,7 +66,7 @@ fun EmergencyScreen(
             },
             text = {
                 Text(
-                    text = "Aksi ini akan membunyikan sirine di semua kamera yang terpasang dan mengirimkan peringatan darurat ke seluruh nomor darurat terdaftar.",
+                    text = "Permintaan SOS akan dikirim ke server. Sirine hanya berbunyi jika backend dan kamera mendukung perintah alarm.",
                     color = TextPrimary
                 )
             },
@@ -76,18 +76,34 @@ fun EmergencyScreen(
                         showConfirmDialog = false
                         isTriggeringSos = true
                         coroutineScope.launch {
-                            val result = repository.triggerSos()
-                            isTriggeringSos = false
-                            Toast.makeText(
-                                context,
-                                result.getOrDefault("Alarm darurat berhasil diaktifkan!"),
-                                Toast.LENGTH_LONG
-                            ).show()
+                            try {
+                                repository.triggerSos()
+                                    .onSuccess {
+                                        Toast.makeText(
+                                            context,
+                                            "Permintaan SOS berhasil dikirim ke server.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                    .onFailure { error ->
+                                        Toast.makeText(
+                                            context,
+                                            "Gagal mengirim SOS: ${error.localizedMessage ?: "periksa koneksi dan coba lagi."}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                            } finally {
+                                isTriggeringSos = false
+                            }
                         }
                     },
+                    enabled = !isTriggeringSos,
                     colors = ButtonDefaults.buttonColors(containerColor = StatusDanger)
                 ) {
-                    Text("AKTIFKAN SEKARANG", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (isTriggeringSos) "MENGIRIM..." else "AKTIFKAN SEKARANG",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {
@@ -150,7 +166,7 @@ fun EmergencyScreen(
                                 .size(110.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFFFEE2E2))
-                                .clickable { showConfirmDialog = true },
+                                .clickable(enabled = !isTriggeringSos) { showConfirmDialog = true },
                             contentAlignment = Alignment.Center
                         ) {
                             Box(
@@ -170,6 +186,23 @@ fun EmergencyScreen(
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
+                        if (isTriggeringSos) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = StatusDanger
+                                )
+                                Text(
+                                    text = "Mengirim permintaan darurat...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
                     }
                 }
             }
