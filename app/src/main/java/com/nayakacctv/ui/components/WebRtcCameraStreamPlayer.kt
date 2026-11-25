@@ -51,6 +51,8 @@ import org.webrtc.RtpTransceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoFrame
+import org.webrtc.VideoSink
 import org.webrtc.VideoTrack
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -221,6 +223,14 @@ private class WebRtcWhepSession(
     private val released = AtomicBoolean(false)
     private val offerSent = AtomicBoolean(false)
     private val failureReported = AtomicBoolean(false)
+    private val firstFrameReported = AtomicBoolean(false)
+    private val firstFrameSink = VideoSink { _: VideoFrame ->
+        if (firstFrameReported.compareAndSet(false, true)) {
+            mainHandler.post {
+                if (!released.get()) onConnected()
+            }
+        }
+    }
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -306,9 +316,7 @@ private class WebRtcWhepSession(
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
             when (state) {
                 PeerConnection.IceConnectionState.CONNECTED,
-                PeerConnection.IceConnectionState.COMPLETED -> mainHandler.post {
-                    if (!released.get()) onConnected()
-                }
+                PeerConnection.IceConnectionState.COMPLETED -> Unit
                 PeerConnection.IceConnectionState.FAILED -> fail("Negosiasi ICE gagal.")
                 else -> Unit
             }
@@ -329,7 +337,10 @@ private class WebRtcWhepSession(
             stream.audioTracks.forEach { it.setEnabled(!muted) }
         }
         override fun onRemoveStream(stream: MediaStream) {
-            stream.videoTracks.forEach { it.removeSink(renderer) }
+            stream.videoTracks.forEach {
+                it.removeSink(renderer)
+                it.removeSink(firstFrameSink)
+            }
         }
         override fun onDataChannel(dataChannel: org.webrtc.DataChannel) = Unit
         override fun onRenegotiationNeeded() = Unit
@@ -348,9 +359,13 @@ private class WebRtcWhepSession(
     }
 
     private fun attachVideoTrack(track: VideoTrack) {
-        remoteVideoTrack?.removeSink(renderer)
+        remoteVideoTrack?.let {
+            it.removeSink(renderer)
+            it.removeSink(firstFrameSink)
+        }
         remoteVideoTrack = track
         track.addSink(renderer)
+        track.addSink(firstFrameSink)
     }
 
     private fun postOffer() {
@@ -401,7 +416,10 @@ private class WebRtcWhepSession(
 
     fun release() {
         if (!released.compareAndSet(false, true)) return
-        remoteVideoTrack?.removeSink(renderer)
+        remoteVideoTrack?.let {
+            it.removeSink(renderer)
+            it.removeSink(firstFrameSink)
+        }
         peerConnection?.close()
         peerConnection?.dispose()
         peerConnection = null

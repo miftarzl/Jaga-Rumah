@@ -1,6 +1,12 @@
 package com.nayakacctv.data.model
 
+import com.google.gson.Gson
+import com.google.gson.TypeAdapter
+import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 
 data class LoginRequest(
     @SerializedName("email") val email: String,
@@ -78,10 +84,43 @@ data class PushTokenRequest(
     @SerializedName("app_version") val appVersion: String = "1.0.0"
 )
 
+@JsonAdapter(ParkingZonePayloadAdapter::class)
+data class ParkingZonePayload(val zone: ParkingZone?)
+
+class ParkingZonePayloadAdapter : TypeAdapter<ParkingZonePayload>() {
+    private val gson = Gson()
+
+    override fun write(out: JsonWriter, value: ParkingZonePayload?) {
+        val zone = value?.zone
+        if (zone == null) {
+            val serializeNulls = out.serializeNulls
+            out.serializeNulls = true
+            try {
+                out.nullValue()
+            } finally {
+                out.serializeNulls = serializeNulls
+            }
+        } else {
+            gson.toJson(zone, ParkingZone::class.java, out)
+        }
+    }
+
+    override fun read(input: JsonReader): ParkingZonePayload {
+        if (input.peek() == JsonToken.NULL) {
+            input.nextNull()
+            return ParkingZonePayload(null)
+        }
+        return ParkingZonePayload(gson.fromJson(input, ParkingZone::class.java))
+    }
+}
+
 data class AlertCameraSettingsRequest(
     @SerializedName("camera_id") val cameraId: String,
     @SerializedName("motion_detection_enabled") val motionDetectionEnabled: Boolean,
     @SerializedName("person_detection_enabled") val personDetectionEnabled: Boolean,
+    @SerializedName("vehicle_detection_enabled") val vehicleDetectionEnabled: Boolean,
+    @SerializedName("vehicle_guard_mode") val vehicleGuardMode: Boolean,
+    @SerializedName("parking_zone") val parkingZone: ParkingZonePayload = ParkingZonePayload(null),
     @SerializedName("notifications_enabled") val notificationsEnabled: Boolean
 )
 

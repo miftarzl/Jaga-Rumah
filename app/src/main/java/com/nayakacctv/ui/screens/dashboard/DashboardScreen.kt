@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,6 +24,7 @@ import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.components.AlertItemCard
 import com.nayakacctv.ui.components.CameraCard
 import com.nayakacctv.ui.theme.*
+import com.nayakacctv.ui.utils.DashboardSnapshotStore
 import kotlinx.coroutines.launch
 
 @Composable
@@ -36,6 +38,8 @@ fun DashboardScreen(
     onNavigateToAutomation: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val dashboardSnapshots by DashboardSnapshotStore.snapshots.collectAsState()
     var summary by remember { mutableStateOf<DashboardSummary?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     val customer = repository.getCurrentCustomer()
@@ -371,7 +375,10 @@ fun DashboardScreen(
                 items(cameras.take(3)) { cam ->
                     CameraCard(
                         camera = cam,
-                        onClick = { onNavigateToLiveView(cam.id) }
+                        onClick = { onNavigateToLiveView(cam.id) },
+                        snapshotFile = dashboardSnapshots[cam.id]?.file
+                            ?: DashboardSnapshotStore.cachedSnapshot(context, cam.id),
+                        loadSnapshotFromServer = false
                     )
                 }
             }

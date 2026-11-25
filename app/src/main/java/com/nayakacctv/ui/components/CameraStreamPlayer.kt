@@ -29,6 +29,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -39,7 +40,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 private const val MAX_AUTOMATIC_RETRIES = 3
 private const val FRAME_PROGRESS_CHECK_INTERVAL_MS = 1_000L
-private const val FRAME_STALL_TIMEOUT_MS = 15_000L
+private const val FRAME_STALL_TIMEOUT_MS = 10_000L
 private const val STABLE_PLAYBACK_TO_RESET_RETRIES_MS = 30_000L
 private const val RETRY_BASE_DELAY_MS = 2_000L
 
@@ -167,6 +168,7 @@ private fun Media3CameraStreamPlayer(
             }
     }
     val renderedVideoFrames = remember(player) { AtomicLong(0L) }
+    var hasRenderedFirstFrame by remember(player) { mutableStateOf(false) }
 
     LaunchedEffect(player, isMuted) {
         player.volume = if (isMuted) 0f else 1f
@@ -209,7 +211,7 @@ private fun Media3CameraStreamPlayer(
             }
 
             if (now - lastFrameProgressAt >= FRAME_STALL_TIMEOUT_MS) {
-                val message = "Tidak ada frame video baru selama 15 detik."
+                val message = "Tidak ada frame video baru selama 10 detik."
                 stablePlaybackSince = 0L
                 if (automaticRetryAttempts < MAX_AUTOMATIC_RETRIES) {
                     automaticRetryAttempts++
@@ -269,9 +271,14 @@ private fun Media3CameraStreamPlayer(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) {
                     hasError = false
-                    isBuffering = false
-                    retryTrigger = 0
-                    currentOnStateChange("playing")
+                    if (hasRenderedFirstFrame) {
+                        isBuffering = false
+                        retryTrigger = 0
+                        currentOnStateChange("playing")
+                    } else {
+                        isBuffering = true
+                        currentOnStateChange("connecting")
+                    }
                 } else if (playbackState == Player.STATE_BUFFERING) {
                     isBuffering = true
                     currentOnStateChange("connecting")
@@ -297,16 +304,31 @@ private fun Media3CameraStreamPlayer(
                 }
             }
         }
+        val analyticsListener = object : AnalyticsListener {
+            override fun onRenderedFirstFrame(
+                eventTime: AnalyticsListener.EventTime,
+                output: Any,
+                renderTimeMs: Long
+            ) {
+                hasRenderedFirstFrame = true
+                isBuffering = false
+                hasError = false
+                retryTrigger = 0
+                currentOnStateChange("playing")
+            }
+        }
         val videoFrameMetadataListener = VideoFrameMetadataListener { _, _, _, _ ->
             renderedVideoFrames.incrementAndGet()
         }
         player.setVideoFrameMetadataListener(videoFrameMetadataListener)
         player.addListener(listener)
+        player.addAnalyticsListener(analyticsListener)
         currentOnStateChange("connecting")
 
         onDispose {
             player.clearVideoFrameMetadataListener(videoFrameMetadataListener)
             player.removeListener(listener)
+            player.removeAnalyticsListener(analyticsListener)
             player.release()
         }
     }

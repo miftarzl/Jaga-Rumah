@@ -222,7 +222,7 @@ Status “LIVE HD” sebelumnya hanya menunjukkan bahwa ExoPlayer berada pada st
 `READY`; status itu sendiri tidak memastikan bahwa frame video masih diterima.
 Android sekarang memantau progres setiap frame yang akan ditampilkan. ExoPlayer
 diberi kesempatan menangani buffering normal; aplikasi baru mencoba memulai
-ulang jika tidak ada frame baru selama 15 detik saat pemutar aktif. Retry
+ulang jika tidak ada frame baru selama 10 detik saat pemutar aktif. Retry
 dibatasi hingga tiga kali dengan jeda bertambah (2, 4, lalu 8 detik), dan hitungan
 baru direset setelah 30 detik pemutaran stabil. Jika frame tetap tidak masuk,
 aplikasi menampilkan kegagalan koneksi.
@@ -235,3 +235,10 @@ Untuk mengurangi buffering berulang, pemutar memakai buffer minimum 10 detik
 dan maksimum 30 detik, mulai setelah 3 detik buffer, serta menargetkan jeda live
 10 detik (rentang 8-20 detik). Dampaknya, tayangan dapat tertinggal beberapa
 detik dari kejadian langsung, tetapi lebih tahan terhadap jitter jaringan.
+
+## 9. Snapshot preview dashboard
+
+Kartu kamera di dashboard tidak lagi meminta snapshot berulang ke server. Kartu
+menampilkan frame dari stream lokal setelah frame pertama benar-benar dirender
+di layar live. Frame disimpan di cache aplikasi satu kali per sesi live kamera;
+jika stream belum pernah dibuka, kartu menampilkan petunjuk untuk membuka stream.

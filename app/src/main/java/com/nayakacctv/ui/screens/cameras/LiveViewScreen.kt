@@ -3,6 +3,7 @@ package com.nayakacctv.ui.screens.cameras
 import android.Manifest
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.core.view.WindowCompat
@@ -53,6 +54,7 @@ import com.nayakacctv.ui.components.NayakaTopAppBar
 import com.nayakacctv.ui.components.StatusBadge
 import com.nayakacctv.ui.theme.*
 import com.nayakacctv.ui.utils.CameraTalkRecorder
+import com.nayakacctv.ui.utils.DashboardSnapshotStore
 import com.nayakacctv.ui.utils.StreamRecorder
 import com.nayakacctv.ui.utils.findFragmentActivity
 import kotlinx.coroutines.delay
@@ -119,6 +121,7 @@ fun LiveViewScreen(
     }
 
     val streamController = rememberCameraStreamController()
+    var hasCapturedDashboardSnapshot by remember(activeCameraId) { mutableStateOf(false) }
     var isMuted by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var isSavingRecording by remember { mutableStateOf(false) }
@@ -142,6 +145,39 @@ fun LiveViewScreen(
     val isPtzLoading = pendingPtzRequests > 0
     val cameraTalkRecorder = remember { CameraTalkRecorder() }
     val ptzRequestMutex = remember { Mutex() }
+
+    fun handleStreamState(state: String) {
+        streamStatus = when (state) {
+            "playing" -> "LIVE HD"
+            "webrtc_playing" -> "LIVE • LOW LATENCY"
+            "connecting" -> "Menghubungkan..."
+            "reconnecting" -> "Menyambungkan kembali..."
+            else -> "Koneksi Terputus"
+        }
+
+        if ((state == "playing" || state == "webrtc_playing") && !hasCapturedDashboardSnapshot) {
+            hasCapturedDashboardSnapshot = true
+            val snapshotCameraId = activeCameraId
+            coroutineScope.launch {
+                delay(300)
+                streamController.captureFrame { bitmap ->
+                    if (bitmap == null) {
+                        hasCapturedDashboardSnapshot = false
+                        Log.w("NAYAKA_STREAM", "Gagal mengambil frame untuk snapshot dashboard.")
+                    } else {
+                        coroutineScope.launch {
+                            try {
+                                DashboardSnapshotStore.save(context, snapshotCameraId, bitmap)
+                            } catch (error: Exception) {
+                                Log.e("NAYAKA_STREAM", "Gagal menyimpan snapshot dashboard.", error)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     val microphonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -324,15 +360,7 @@ fun LiveViewScreen(
                     fallbackStreamUrl = fallbackStreamUrl,
                     controller = streamController,
                     modifier = Modifier.fillMaxSize(),
-                    onStateChange = { state ->
-                        streamStatus = when (state) {
-                            "playing" -> "LIVE HD"
-                            "webrtc_playing" -> "LIVE • LOW LATENCY"
-                            "connecting" -> "Menghubungkan..."
-                            "reconnecting" -> "Menyambungkan kembali..."
-                            else -> "Koneksi Terputus"
-                        }
-                    }
+                    onStateChange = { state -> handleStreamState(state) }
                 )
             }
 
@@ -533,15 +561,7 @@ fun LiveViewScreen(
                     fallbackStreamUrl = fallbackStreamUrl,
                             controller = streamController,
                             modifier = Modifier.fillMaxSize(),
-                            onStateChange = { state ->
-                                streamStatus = when (state) {
-                                    "playing" -> "LIVE HD"
-                            "webrtc_playing" -> "LIVE • LOW LATENCY"
-                                    "connecting" -> "Menghubungkan..."
-                            "reconnecting" -> "Menyambungkan kembali..."
-                                    else -> "Koneksi Terputus"
-                                }
-                            }
+                            onStateChange = { state -> handleStreamState(state) }
                         )
                     } else if (streamError != null) {
                     Text(

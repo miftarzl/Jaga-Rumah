@@ -1,11 +1,13 @@
 package com.nayakacctv.data.repository
 
 import android.content.Context
+import android.net.Uri
 import android.util.Base64
 import com.google.gson.Gson
 import com.nayakacctv.data.local.TokenManager
 import com.nayakacctv.data.model.*
 import com.nayakacctv.data.network.ApiService
+import com.nayakacctv.data.network.NetworkClient
 import com.nayakacctv.ui.utils.BiometricHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -610,6 +612,13 @@ class NayakaRepository(
 
     suspend fun getAlertSettings(): Result<AlertSettingsResponse> =
         safeApiCall { api.getAlertSettings() }.map { it }
+
+    fun getCameraSnapshotUrl(
+        cameraId: String,
+        nonce: Long = System.currentTimeMillis()
+    ): String = NetworkClient.resolveUrl(
+        "mobile/cameras/${Uri.encode(cameraId)}/snapshot?t=$nonce"
+    )
 
     suspend fun saveAlertSettings(
         cameras: List<AlertCameraSettingsRequest>,

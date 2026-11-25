@@ -29,6 +29,7 @@ import com.nayakacctv.data.model.Camera
 import com.nayakacctv.data.network.NetworkClient
 import com.nayakacctv.ui.theme.*
 import com.nayakacctv.ui.utils.Formatters
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -219,14 +220,15 @@ fun CameraCard(
     camera: Camera,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    snapshotFile: File? = null,
+    loadSnapshotFromServer: Boolean = true,
     onSettingsClick: (() -> Unit)? = null
 ) {
     val isOnline = camera.status.equals("online", ignoreCase = true)
     var snapshotTick by remember(camera.id) { mutableLongStateOf(System.currentTimeMillis()) }
 
-    // Auto-refresh snapshot setiap 6 detik jika kamera berstatus online agar tidak statis
-    LaunchedEffect(camera.id, isOnline) {
-        if (isOnline) {
+    LaunchedEffect(camera.id, isOnline, loadSnapshotFromServer, snapshotFile) {
+        if (loadSnapshotFromServer && snapshotFile == null && isOnline) {
             while (true) {
                 delay(6000)
                 snapshotTick = System.currentTimeMillis()
@@ -234,18 +236,30 @@ fun CameraCard(
         }
     }
 
-    val snapshotUrl = remember(camera.thumbnailUrl, camera.id, snapshotTick) {
-        val base = if (!camera.thumbnailUrl.isNullOrBlank()) {
-            NetworkClient.resolveUrl(camera.thumbnailUrl)
+    val snapshotUrl = remember(
+        camera.thumbnailUrl,
+        camera.id,
+        snapshotTick,
+        loadSnapshotFromServer,
+        snapshotFile,
+        isOnline
+    ) {
+        if (!loadSnapshotFromServer || snapshotFile != null) {
+            null
         } else {
-            NetworkClient.resolveUrl("mobile/cameras/${camera.id}/snapshot")
-        }
-        if (isOnline) {
-            if (base.contains("?")) "$base&t=$snapshotTick" else "$base?t=$snapshotTick"
-        } else {
-            base
+            val base = if (!camera.thumbnailUrl.isNullOrBlank()) {
+                NetworkClient.resolveUrl(camera.thumbnailUrl)
+            } else {
+                NetworkClient.resolveUrl("mobile/cameras/${camera.id}/snapshot")
+            }
+            if (isOnline) {
+                if (base.contains("?")) "$base&t=$snapshotTick" else "$base?t=$snapshotTick"
+            } else {
+                base
+            }
         }
     }
+    val snapshotModel: Any? = snapshotFile ?: snapshotUrl
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -262,12 +276,23 @@ fun CameraCard(
                     .background(Color(0xFF1E293B))
                     .clickable(onClick = onClick)
             ) {
-                AsyncImage(
-                    model = snapshotUrl,
-                    contentDescription = camera.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (snapshotModel != null) {
+                    AsyncImage(
+                        model = snapshotModel,
+                        contentDescription = camera.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Text(
+                        text = "Snapshot akan diambil setelah stream dibuka.",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(16.dp)
+                    )
+                }
 
                 // Tombol Play di tengah agar intuitif bisa langsung ditonton
                 Box(
@@ -287,7 +312,7 @@ fun CameraCard(
                 }
 
                 // Tag Status Snapshot Aktif (Top-Start)
-                if (isOnline) {
+                if (isOnline && snapshotModel != null) {
                     Box(
                         modifier = Modifier
                             .padding(10.dp)

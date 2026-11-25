@@ -176,11 +176,21 @@ data class AlertDetailResponse(
     @SerializedName("alert") val alert: AlertItem? = null
 )
 
+data class ParkingZone(
+    @SerializedName("x1") val x1: Float,
+    @SerializedName("y1") val y1: Float,
+    @SerializedName("x2") val x2: Float,
+    @SerializedName("y2") val y2: Float
+)
+
 data class AlertCameraSettings(
     @SerializedName("camera_id") val cameraId: String = "",
     @SerializedName("camera_name") val cameraName: String = "",
     @SerializedName("motion_detection_enabled") val motionDetectionEnabled: Boolean = true,
     @SerializedName("person_detection_enabled") val personDetectionEnabled: Boolean = true,
+    @SerializedName("vehicle_detection_enabled") val vehicleDetectionEnabled: Boolean = true,
+    @SerializedName("vehicle_guard_mode") val vehicleGuardMode: Boolean = false,
+    @SerializedName("parking_zone") val parkingZone: ParkingZone? = null,
     @SerializedName("notifications_enabled") val notificationsEnabled: Boolean = true
 )
 

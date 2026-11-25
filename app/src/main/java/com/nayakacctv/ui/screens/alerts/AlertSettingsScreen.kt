@@ -30,6 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,8 +54,11 @@ import androidx.compose.ui.unit.dp
 import com.nayakacctv.data.model.Camera
 import com.nayakacctv.data.model.AlertCameraSettingsRequest
 import com.nayakacctv.data.model.AlertSleepModeRequest
+import com.nayakacctv.data.model.ParkingZone
+import com.nayakacctv.data.model.ParkingZonePayload
 import com.nayakacctv.data.repository.NayakaRepository
 import com.nayakacctv.ui.components.NayakaTopAppBar
+import com.nayakacctv.ui.components.ParkingZoneEditorDialog
 import com.nayakacctv.ui.theme.BackgroundSlate
 import com.nayakacctv.ui.theme.PrimaryBlue
 import com.nayakacctv.ui.theme.StatusDanger
@@ -76,6 +81,9 @@ fun AlertSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val motionEnabled = remember { mutableStateMapOf<String, Boolean>() }
     val personEnabled = remember { mutableStateMapOf<String, Boolean>() }
+    val vehicleEnabled = remember { mutableStateMapOf<String, Boolean>() }
+    val vehicleGuardMode = remember { mutableStateMapOf<String, Boolean>() }
+    val parkingZones = remember { mutableStateMapOf<String, ParkingZone?>() }
     val notificationsEnabled = remember { mutableStateMapOf<String, Boolean>() }
     val scheduledCameraIds = remember { mutableStateListOf<String>() }
     val selectedDays = remember { mutableStateListOf("Sen", "Sel", "Rab", "Kam", "Jum") }
@@ -83,6 +91,8 @@ fun AlertSettingsScreen(
     var cameras by remember { mutableStateOf<List<Camera>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    var editingZoneCamera by remember { mutableStateOf<Camera?>(null) }
+    var snapshotNonce by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var sleepModeEnabled by remember { mutableStateOf(false) }
     var startTime by remember { mutableStateOf("22:00") }
     var endTime by remember { mutableStateOf("06:00") }
@@ -92,18 +102,15 @@ fun AlertSettingsScreen(
             .onSuccess { settings ->
                 val loadedCameras = repository.getCameras(forceRefresh = true).getOrDefault(emptyList())
                 cameras = loadedCameras
-                settings.cameras.forEach { alertCamera ->
-                    val camera = loadedCameras.firstOrNull { it.id == alertCamera.cameraId }
-                    if (camera != null) {
-                        motionEnabled[camera.id] = alertCamera.motionDetectionEnabled
-                        personEnabled[camera.id] = alertCamera.personDetectionEnabled
-                        notificationsEnabled[camera.id] = alertCamera.notificationsEnabled
-                    }
-                }
+                val settingsByCameraId = settings.cameras.associateBy { it.cameraId }
                 loadedCameras.forEach { camera ->
-                    motionEnabled[camera.id] = motionEnabled[camera.id] ?: true
-                    personEnabled[camera.id] = personEnabled[camera.id] ?: true
-                    notificationsEnabled[camera.id] = notificationsEnabled[camera.id] ?: true
+                    val cameraSettings = settingsByCameraId[camera.id]
+                    motionEnabled[camera.id] = cameraSettings?.motionDetectionEnabled ?: true
+                    personEnabled[camera.id] = cameraSettings?.personDetectionEnabled ?: true
+                    vehicleEnabled[camera.id] = cameraSettings?.vehicleDetectionEnabled ?: true
+                    vehicleGuardMode[camera.id] = cameraSettings?.vehicleGuardMode ?: false
+                    parkingZones[camera.id] = cameraSettings?.parkingZone
+                    notificationsEnabled[camera.id] = cameraSettings?.notificationsEnabled ?: true
                 }
                 sleepModeEnabled = settings.sleepMode.enabled
                 startTime = settings.sleepMode.startTime
@@ -155,7 +162,7 @@ fun AlertSettingsScreen(
                 SectionTitle(
                     icon = Icons.Default.Security,
                     title = "Pengaturan per kamera",
-                    subtitle = "Pilih kamera yang mendeteksi gerakan dan mengirim notifikasi."
+                    subtitle = "Atur deteksi gerak, orang, kendaraan, dan notifikasi per kamera."
                 )
             }
 
@@ -185,9 +192,18 @@ fun AlertSettingsScreen(
                         camera = camera,
                         motionEnabled = motionEnabled[camera.id] ?: false,
                         personEnabled = personEnabled[camera.id] ?: false,
+                        vehicleEnabled = vehicleEnabled[camera.id] ?: false,
+                        vehicleGuardMode = vehicleGuardMode[camera.id] ?: false,
+                        parkingZone = parkingZones[camera.id],
                         notificationsEnabled = notificationsEnabled[camera.id] ?: false,
                         onMotionChanged = { motionEnabled[camera.id] = it },
                         onPersonChanged = { personEnabled[camera.id] = it },
+                        onVehicleChanged = { vehicleEnabled[camera.id] = it },
+                        onVehicleGuardModeChanged = { vehicleGuardMode[camera.id] = it },
+                        onParkingZoneClick = {
+                            snapshotNonce = System.currentTimeMillis()
+                            editingZoneCamera = camera
+                        },
                         onNotificationsChanged = { notificationsEnabled[camera.id] = it }
                     )
                 }
@@ -234,6 +250,9 @@ fun AlertSettingsScreen(
                                     cameraId = camera.id,
                                     motionDetectionEnabled = motionEnabled[camera.id] ?: true,
                                     personDetectionEnabled = personEnabled[camera.id] ?: true,
+                                    vehicleDetectionEnabled = vehicleEnabled[camera.id] ?: true,
+                                    vehicleGuardMode = vehicleGuardMode[camera.id] ?: false,
+                                    parkingZone = ParkingZonePayload(parkingZones[camera.id]),
                                     notificationsEnabled = notificationsEnabled[camera.id] ?: true
                                 )
                             }
@@ -262,6 +281,20 @@ fun AlertSettingsScreen(
                     Text("Simpan pengaturan")
                 }
             }
+        }
+
+        editingZoneCamera?.let { camera ->
+            ParkingZoneEditorDialog(
+                cameraName = camera.name,
+                snapshotUrl = repository.getCameraSnapshotUrl(camera.id, snapshotNonce),
+                initialZone = parkingZones[camera.id],
+                onDismiss = { editingZoneCamera = null },
+                onRefreshSnapshot = { snapshotNonce = System.currentTimeMillis() },
+                onSave = { zone ->
+                    parkingZones[camera.id] = zone
+                    editingZoneCamera = null
+                }
+            )
         }
     }
 }
@@ -319,9 +352,15 @@ private fun CameraAlertCard(
     camera: Camera,
     motionEnabled: Boolean,
     personEnabled: Boolean,
+    vehicleEnabled: Boolean,
+    vehicleGuardMode: Boolean,
+    parkingZone: ParkingZone?,
     notificationsEnabled: Boolean,
     onMotionChanged: (Boolean) -> Unit,
     onPersonChanged: (Boolean) -> Unit,
+    onVehicleChanged: (Boolean) -> Unit,
+    onVehicleGuardModeChanged: (Boolean) -> Unit,
+    onParkingZoneClick: () -> Unit,
     onNotificationsChanged: (Boolean) -> Unit
 ) {
     Card(
@@ -352,14 +391,47 @@ private fun CameraAlertCard(
             )
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             SettingSwitchRow(
+                title = "Deteksi kendaraan (AI)",
+                subtitle = "Mendeteksi motor, mobil, sepeda, bus, dan truk.",
+                checked = vehicleEnabled,
+                onCheckedChange = onVehicleChanged
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            SettingSwitchRow(
+                title = "Mode Jaga Parkir (Anti-Maling)",
+                subtitle = "Peringatan kritis jika kendaraan parkir bergeser atau hilang.",
+                checked = vehicleGuardMode,
+                enabled = vehicleEnabled,
+                onCheckedChange = onVehicleGuardModeChanged
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Zona Parkir", fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text(
+                        if (parkingZone != null) "Zona Kustom Aktif" else "Seluruh layar dipantau",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+                OutlinedButton(onClick = onParkingZoneClick) {
+                    Text("Atur Zona")
+                }
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            SettingSwitchRow(
                 title = "Notifikasi alert",
-                subtitle = if (motionEnabled) {
-                    "Kirim alert saat gerakan terdeteksi."
+                subtitle = if (motionEnabled || personEnabled || vehicleEnabled) {
+                    "Kirim notifikasi untuk deteksi yang aktif."
                 } else {
-                    "Aktifkan deteksi gerak untuk menerima alert."
+                    "Aktifkan deteksi gerak, orang, atau kendaraan untuk menerima alert."
                 },
                 checked = notificationsEnabled,
-                enabled = motionEnabled,
+                enabled = motionEnabled || personEnabled || vehicleEnabled,
                 onCheckedChange = onNotificationsChanged
             )
         }
