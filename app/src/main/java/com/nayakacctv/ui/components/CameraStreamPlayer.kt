@@ -39,8 +39,8 @@ import kotlinx.coroutines.isActive
 import java.util.concurrent.atomic.AtomicLong
 
 private const val MAX_AUTOMATIC_RETRIES = 5
-private const val FRAME_PROGRESS_CHECK_INTERVAL_MS = 2_000L
-private const val FRAME_STALL_TIMEOUT_MS = 25_000L
+private const val FRAME_PROGRESS_CHECK_INTERVAL_MS = 1_000L
+private const val FRAME_STALL_TIMEOUT_MS = 10_000L
 private const val STABLE_PLAYBACK_TO_RESET_RETRIES_MS = 30_000L
 private const val RETRY_BASE_DELAY_MS = 2_000L
 
@@ -184,30 +184,33 @@ private fun Media3CameraStreamPlayer(
 
     LaunchedEffect(player) {
         var observedFrameCount = renderedVideoFrames.get()
-        var lastFrameProgressAt = SystemClock.elapsedRealtime()
+        var lastFrameProgressAt = 0L
         var stablePlaybackSince = 0L
 
         while (isActive) {
             delay(FRAME_PROGRESS_CHECK_INTERVAL_MS)
             val now = SystemClock.elapsedRealtime()
             val currentFrameCount = renderedVideoFrames.get()
-            if (player.playbackState != Player.STATE_READY || !player.playWhenReady || !player.isPlaying) {
-                observedFrameCount = currentFrameCount
-                lastFrameProgressAt = now
-                stablePlaybackSince = 0L
-                continue
-            }
-
             if (currentFrameCount > observedFrameCount) {
                 observedFrameCount = currentFrameCount
                 lastFrameProgressAt = now
-                if (stablePlaybackSince == 0L) {
-                    stablePlaybackSince = now
-                } else if (now - stablePlaybackSince >= STABLE_PLAYBACK_TO_RESET_RETRIES_MS) {
-                    automaticRetryAttempts = 0
-                    stablePlaybackSince = now
+                if (player.playbackState == Player.STATE_READY && player.playWhenReady && player.isPlaying) {
+                    if (stablePlaybackSince == 0L) {
+                        stablePlaybackSince = now
+                    } else if (now - stablePlaybackSince >= STABLE_PLAYBACK_TO_RESET_RETRIES_MS) {
+                        automaticRetryAttempts = 0
+                        stablePlaybackSince = now
+                    }
+                } else {
+                    stablePlaybackSince = 0L
                 }
                 continue
+            }
+
+            if (lastFrameProgressAt == 0L) continue
+
+            if (player.playbackState != Player.STATE_READY || !player.playWhenReady || !player.isPlaying) {
+                stablePlaybackSince = 0L
             }
 
             if (now - lastFrameProgressAt >= FRAME_STALL_TIMEOUT_MS) {
