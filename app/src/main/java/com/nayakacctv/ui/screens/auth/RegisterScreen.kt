@@ -110,7 +110,7 @@ fun RegisterScreen(
 
         NayakaTextField(
             value = password,
-            onValueChange = { password = it; errorMessage = null },
+            onValueChange = { password = it.filterNot(Char::isWhitespace); errorMessage = null },
             label = "Kata Sandi",
             placeholder = "Minimal 8 karakter",
             leadingIcon = Icons.Default.Lock,
@@ -122,7 +122,7 @@ fun RegisterScreen(
 
         NayakaTextField(
             value = confirmPassword,
-            onValueChange = { confirmPassword = it; errorMessage = null },
+            onValueChange = { confirmPassword = it.filterNot(Char::isWhitespace); errorMessage = null },
             label = "Konfirmasi Kata Sandi",
             placeholder = "Ulangi kata sandi",
             leadingIcon = Icons.Default.Lock,

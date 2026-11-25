@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,7 +87,7 @@ fun LiveViewScreen(
     var showCameraSwitcher by remember { mutableStateOf(false) }
 
     val activity = remember(context) { context.findFragmentActivity() }
-    var isFullscreen by remember { mutableStateOf(false) }
+    var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var showSirenDialog by remember { mutableStateOf(false) }
     var isSirenTriggering by remember { mutableStateOf(false) }
     var lastPtzDirection by remember { mutableStateOf<PtzDirection?>(null) }
@@ -104,7 +105,7 @@ fun LiveViewScreen(
             insetsController.hide(WindowInsetsCompat.Type.systemBars())
             insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         } else {
-            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             insetsController.show(WindowInsetsCompat.Type.systemBars())
         }
     }
@@ -112,7 +113,7 @@ fun LiveViewScreen(
     DisposableEffect(Unit) {
         onDispose {
             activity?.let { act ->
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 act.window?.let { win ->
                     WindowCompat.getInsetsController(win, win.decorView).show(WindowInsetsCompat.Type.systemBars())
                 }

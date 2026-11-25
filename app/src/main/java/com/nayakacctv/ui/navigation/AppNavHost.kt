@@ -41,7 +41,8 @@ import kotlinx.coroutines.launch
 fun AppNavHost(
     navController: NavHostController,
     repository: NayakaRepository,
-    initialAlertId: String? = null
+    initialAlertId: String? = null,
+    onAlertIntentHandled: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val isLocked by AppLockManager.isLockedState.collectAsState()
@@ -56,6 +57,7 @@ fun AppNavHost(
             navController.navigate(Screen.AlertDetail.createRoute(initialAlertId)) {
                 launchSingleTop = true
             }
+            onAlertIntentHandled()
         }
     }
 

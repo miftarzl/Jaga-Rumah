@@ -80,7 +80,7 @@ fun ResetPasswordScreen(
 
         NayakaTextField(
             value = newPassword,
-            onValueChange = { newPassword = it; errorMessage = null },
+            onValueChange = { newPassword = it.filterNot(Char::isWhitespace); errorMessage = null },
             label = "Kata Sandi Baru",
             placeholder = "Minimal 8 karakter",
             leadingIcon = Icons.Default.Lock,
@@ -92,7 +92,7 @@ fun ResetPasswordScreen(
 
         NayakaTextField(
             value = confirmPassword,
-            onValueChange = { confirmPassword = it; errorMessage = null },
+            onValueChange = { confirmPassword = it.filterNot(Char::isWhitespace); errorMessage = null },
             label = "Konfirmasi Kata Sandi Baru",
             placeholder = "Ulangi kata sandi baru",
             leadingIcon = Icons.Default.Lock,

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
+import android.content.Intent
 import androidx.activity.compose.setContent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -24,24 +25,29 @@ class MainActivity : FragmentActivity() {
         private const val REQUEST_POST_NOTIFICATIONS = 4101
     }
 
+    private val pendingAlertId = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val app = application as NayakaApp
         val repository = app.repository
-        app.registerPushToken()
-        requestNotificationPermission()
-        val initialAlertId = intent?.getStringExtra(EXTRA_ALERT_ID)
+        if (savedInstanceState == null) {
+            app.registerPushToken()
+            requestNotificationPermission()
+        }
+        pendingAlertId.value = intent?.getStringExtra(EXTRA_ALERT_ID)
 
         // Saat aplikasi baru dibuka (cold start), jika pengguna sudah login,
         // kunci aplikasi agar pengguna diminta verifikasi biometrik / password terlebih dahulu (konsep m-banking)
-        if (repository.isLoggedIn()) {
+        if (savedInstanceState == null && repository.isLoggedIn()) {
             AppLockManager.lockImmediately()
         }
 
         setContent {
             NayakaCCTVTheme {
                 val navController = rememberNavController()
+                val alertId = pendingAlertId.value
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 if (showSplash) {
                     JagaRumahSplashScreen(onFinished = { showSplash = false })
@@ -49,11 +55,21 @@ class MainActivity : FragmentActivity() {
                     AppNavHost(
                         navController = navController,
                         repository = repository,
-                        initialAlertId = initialAlertId
+                        initialAlertId = alertId,
+                        onAlertIntentHandled = {
+                            pendingAlertId.value = null
+                            intent?.removeExtra(EXTRA_ALERT_ID)
+                        }
                     )
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingAlertId.value = intent.getStringExtra(EXTRA_ALERT_ID)
     }
 
     private fun requestNotificationPermission() {

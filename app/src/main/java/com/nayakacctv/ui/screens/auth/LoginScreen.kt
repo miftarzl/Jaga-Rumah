@@ -116,7 +116,7 @@ fun LoginScreen(
 
         NayakaTextField(
             value = password,
-            onValueChange = { password = it; errorMessage = null },
+            onValueChange = { password = it.filterNot(Char::isWhitespace); errorMessage = null },
             label = "Kata Sandi",
             placeholder = "Masukkan kata sandi",
             leadingIcon = Icons.Default.Lock,

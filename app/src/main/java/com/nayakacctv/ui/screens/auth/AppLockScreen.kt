@@ -415,7 +415,7 @@ fun AppLockScreen(
                         NayakaTextField(
                             value = password,
                             onValueChange = {
-                                password = it
+                                password = it.filterNot(Char::isWhitespace)
                                 errorMessage = null
                             },
                             label = "Kata Sandi",
