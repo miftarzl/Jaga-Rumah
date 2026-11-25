@@ -42,9 +42,11 @@ fun DashboardScreen(
     val dashboardSnapshots by DashboardSnapshotStore.snapshots.collectAsState()
     var summary by remember { mutableStateOf<DashboardSummary?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    var snapshotRefreshKey by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val customer = repository.getCurrentCustomer()
 
     val refreshData: (Boolean) -> Unit = { forceRefresh ->
+        snapshotRefreshKey = maxOf(System.currentTimeMillis(), snapshotRefreshKey + 1)
         coroutineScope.launch {
             isLoading = true
             val res = repository.getDashboard(forceRefresh = forceRefresh)
@@ -376,9 +378,14 @@ fun DashboardScreen(
                     CameraCard(
                         camera = cam,
                         onClick = { onNavigateToLiveView(cam.id) },
-                        snapshotFile = dashboardSnapshots[cam.id]?.file
-                            ?: DashboardSnapshotStore.cachedSnapshot(context, cam.id),
-                        loadSnapshotFromServer = false
+                        snapshotFile = if (cam.status.equals("online", ignoreCase = true)) {
+                            null
+                        } else {
+                            dashboardSnapshots[cam.id]?.file
+                                ?: DashboardSnapshotStore.cachedSnapshot(context, cam.id)
+                        },
+                        loadSnapshotFromServer = true,
+                        snapshotRefreshKey = snapshotRefreshKey
                     )
                 }
             }

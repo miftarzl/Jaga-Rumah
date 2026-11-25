@@ -222,13 +222,16 @@ fun CameraCard(
     modifier: Modifier = Modifier,
     snapshotFile: File? = null,
     loadSnapshotFromServer: Boolean = true,
-    onSettingsClick: (() -> Unit)? = null
+    onSettingsClick: (() -> Unit)? = null,
+    snapshotRefreshKey: Long? = null
 ) {
     val isOnline = camera.status.equals("online", ignoreCase = true)
-    var snapshotTick by remember(camera.id) { mutableLongStateOf(System.currentTimeMillis()) }
+    var snapshotTick by remember(camera.id, snapshotRefreshKey) {
+        mutableLongStateOf(snapshotRefreshKey ?: System.currentTimeMillis())
+    }
 
-    LaunchedEffect(camera.id, isOnline, loadSnapshotFromServer, snapshotFile) {
-        if (loadSnapshotFromServer && snapshotFile == null && isOnline) {
+    LaunchedEffect(camera.id, isOnline, loadSnapshotFromServer, snapshotFile, snapshotRefreshKey) {
+        if (snapshotRefreshKey == null && loadSnapshotFromServer && snapshotFile == null && isOnline) {
             while (true) {
                 delay(6000)
                 snapshotTick = System.currentTimeMillis()
@@ -285,7 +288,7 @@ fun CameraCard(
                     )
                 } else {
                     Text(
-                        text = "Snapshot akan diambil setelah stream dibuka.",
+                        text = "Snapshot belum tersedia.",
                         color = Color.White,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier

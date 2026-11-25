@@ -6,10 +6,10 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * AppLockManager mengatur status proteksi layar aplikasi mirip m-banking.
- * Memiliki toleransi waktu (grace period) 30 detik: jika aplikasi hanya
- * diminimalkan sebentar (< 30 detik), pengguna tidak perlu login/scan ulang.
+ * Fitur auto-lock sementara dinonaktifkan melalui APP_LOCK_ENABLED.
  */
 object AppLockManager {
+    const val APP_LOCK_ENABLED = false
     const val GRACE_PERIOD_MILLIS = 30_000L // 30 detik toleransi lock
 
     private val _isLocked = MutableStateFlow(false)
@@ -21,6 +21,11 @@ object AppLockManager {
     var isSuppressed: Boolean = false
 
     fun lockImmediately() {
+        if (!APP_LOCK_ENABLED) {
+            _isLocked.value = false
+            backgroundTimestamp = 0L
+            return
+        }
         if (!isSuppressed) {
             _isLocked.value = true
         }
@@ -40,14 +45,22 @@ object AppLockManager {
     fun isLocked(): Boolean = _isLocked.value
 
     fun onAppBackgrounded() {
+        if (!APP_LOCK_ENABLED) {
+            backgroundTimestamp = 0L
+            _isLocked.value = false
+            return
+        }
         if (!isSuppressed && !_isLocked.value) {
             backgroundTimestamp = System.currentTimeMillis()
         }
     }
 
     fun onAppForegrounded() {
-        if (isSuppressed) {
+        if (!APP_LOCK_ENABLED || isSuppressed) {
             backgroundTimestamp = 0L
+            if (!APP_LOCK_ENABLED) {
+                _isLocked.value = false
+            }
             return
         }
         if (backgroundTimestamp > 0L) {
