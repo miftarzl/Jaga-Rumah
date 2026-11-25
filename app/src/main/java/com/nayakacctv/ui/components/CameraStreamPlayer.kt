@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.PixelCopy
 import android.view.SurfaceView
@@ -26,13 +27,21 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.nayakacctv.ui.theme.PrimaryBlue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import java.util.concurrent.atomic.AtomicLong
 
 private const val MAX_AUTOMATIC_RETRIES = 3
+private const val FRAME_PROGRESS_CHECK_INTERVAL_MS = 1_000L
+private const val FRAME_STALL_TIMEOUT_MS = 15_000L
+private const val STABLE_PLAYBACK_TO_RESET_RETRIES_MS = 30_000L
+private const val RETRY_BASE_DELAY_MS = 2_000L
 
 class CameraStreamController {
     var captureFrameCallback: ((onCaptured: (Bitmap?) -> Unit) -> Unit)? = null
@@ -123,18 +132,41 @@ private fun Media3CameraStreamPlayer(
     var playerViewInstance by remember { mutableStateOf<PlayerView?>(null) }
 
     val player = remember(streamUrl, forceHls, retryCount) {
-        ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.Builder()
-                .setUri(streamUrl)
-                .apply {
-                    if (forceHls) setMimeType(MimeTypes.APPLICATION_M3U8)
-                }
-                .build()
-            setMediaItem(mediaItem)
-            playWhenReady = true
-            prepare()
-        }
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                10_000, // minBufferMs: tahan jitter jaringan yang singkat
+                30_000, // maxBufferMs: ruang buffer lebih besar untuk live stream
+                3_000,  // bufferForPlaybackMs: mulai setelah buffer awal terkumpul
+                5_000   // bufferForPlaybackAfterRebufferMs: hindari buffer berulang
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
+        val mediaItem = MediaItem.Builder()
+            .setUri(streamUrl)
+            .apply {
+                if (forceHls) setMimeType(MimeTypes.APPLICATION_M3U8)
+            }
+            .setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(10_000L)
+                    .setMinOffsetMs(8_000L)
+                    .setMaxOffsetMs(20_000L)
+                    .setMinPlaybackSpeed(0.97f)
+                    .setMaxPlaybackSpeed(1.05f)
+                    .build()
+            )
+            .build()
+
+        ExoPlayer.Builder(context)
+            .setLoadControl(loadControl)
+            .build().apply {
+                setMediaItem(mediaItem)
+                playWhenReady = true
+                prepare()
+            }
     }
+    val renderedVideoFrames = remember(player) { AtomicLong(0L) }
 
     LaunchedEffect(player, isMuted) {
         player.volume = if (isMuted) 0f else 1f
@@ -142,8 +174,58 @@ private fun Media3CameraStreamPlayer(
 
     LaunchedEffect(retryTrigger) {
         if (retryTrigger > 0) {
-            delay((retryTrigger * 1_000L).coerceAtMost(4_000L))
+            val retryDelayMs = RETRY_BASE_DELAY_MS * (1 shl (retryTrigger - 1))
+            delay(retryDelayMs.coerceAtMost(30_000L))
             retryCount++
+        }
+    }
+
+    LaunchedEffect(player) {
+        var observedFrameCount = renderedVideoFrames.get()
+        var lastFrameProgressAt = SystemClock.elapsedRealtime()
+        var stablePlaybackSince = 0L
+
+        while (isActive) {
+            delay(FRAME_PROGRESS_CHECK_INTERVAL_MS)
+            val now = SystemClock.elapsedRealtime()
+            val currentFrameCount = renderedVideoFrames.get()
+            if (player.playbackState != Player.STATE_READY || !player.playWhenReady || !player.isPlaying) {
+                observedFrameCount = currentFrameCount
+                lastFrameProgressAt = now
+                stablePlaybackSince = 0L
+                continue
+            }
+
+            if (currentFrameCount > observedFrameCount) {
+                observedFrameCount = currentFrameCount
+                lastFrameProgressAt = now
+                if (stablePlaybackSince == 0L) {
+                    stablePlaybackSince = now
+                } else if (now - stablePlaybackSince >= STABLE_PLAYBACK_TO_RESET_RETRIES_MS) {
+                    automaticRetryAttempts = 0
+                    stablePlaybackSince = now
+                }
+                continue
+            }
+
+            if (now - lastFrameProgressAt >= FRAME_STALL_TIMEOUT_MS) {
+                val message = "Tidak ada frame video baru selama 15 detik."
+                stablePlaybackSince = 0L
+                if (automaticRetryAttempts < MAX_AUTOMATIC_RETRIES) {
+                    automaticRetryAttempts++
+                    isBuffering = true
+                    hasError = false
+                    errorMessage = message
+                    retryTrigger = automaticRetryAttempts
+                    currentOnStateChange("reconnecting")
+                } else {
+                    hasError = true
+                    isBuffering = false
+                    errorMessage = message
+                    currentOnStateChange("error")
+                }
+                break
+            }
         }
     }
 
@@ -188,7 +270,6 @@ private fun Media3CameraStreamPlayer(
                 if (playbackState == Player.STATE_READY) {
                     hasError = false
                     isBuffering = false
-                    automaticRetryAttempts = 0
                     retryTrigger = 0
                     currentOnStateChange("playing")
                 } else if (playbackState == Player.STATE_BUFFERING) {
@@ -216,10 +297,15 @@ private fun Media3CameraStreamPlayer(
                 }
             }
         }
+        val videoFrameMetadataListener = VideoFrameMetadataListener { _, _, _, _ ->
+            renderedVideoFrames.incrementAndGet()
+        }
+        player.setVideoFrameMetadataListener(videoFrameMetadataListener)
         player.addListener(listener)
         currentOnStateChange("connecting")
 
         onDispose {
+            player.clearVideoFrameMetadataListener(videoFrameMetadataListener)
             player.removeListener(listener)
             player.release()
         }

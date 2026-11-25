@@ -215,3 +215,23 @@ Pesan singkat yang dapat diteruskan ke tim backend:
 
 Saat ini Android hanya memakai `hls_url`; membuka port RTSP `8554` atau WebRTC
 `8889` saja tidak akan memperbaiki pemutaran HLS di layar live.
+
+## 8. Gambar berhenti tetapi status tetap “LIVE HD”
+
+Status “LIVE HD” sebelumnya hanya menunjukkan bahwa ExoPlayer berada pada status
+`READY`; status itu sendiri tidak memastikan bahwa frame video masih diterima.
+Android sekarang memantau progres setiap frame yang akan ditampilkan. ExoPlayer
+diberi kesempatan menangani buffering normal; aplikasi baru mencoba memulai
+ulang jika tidak ada frame baru selama 15 detik saat pemutar aktif. Retry
+dibatasi hingga tiga kali dengan jeda bertambah (2, 4, lalu 8 detik), dan hitungan
+baru direset setelah 30 detik pemutaran stabil. Jika frame tetap tidak masuk,
+aplikasi menampilkan kegagalan koneksi.
+
+Jika masalah terus berulang, periksa kestabilan sumber kamera dan MediaMTX serta
+akses playlist dan segmen HLS dari jaringan HP. Pemulihan di aplikasi tidak
+dapat memperbaiki sumber stream yang terus mengirim frame beku atau terhenti.
+
+Untuk mengurangi buffering berulang, pemutar memakai buffer minimum 10 detik
+dan maksimum 30 detik, mulai setelah 3 detik buffer, serta menargetkan jeda live
+10 detik (rentang 8-20 detik). Dampaknya, tayangan dapat tertinggal beberapa
+detik dari kejadian langsung, tetapi lebih tahan terhadap jitter jaringan.
