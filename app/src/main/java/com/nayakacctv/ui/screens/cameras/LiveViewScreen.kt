@@ -453,7 +453,7 @@ fun LiveViewScreen(
 
                 IconButton(
                     onClick = {
-                        val activeUrl = streamUrl
+                        val activeUrl = fallbackStreamUrl?.takeIf { it.isNotBlank() } ?: streamUrl
                         if (!isRecording) {
                             if (activeUrl.isNullOrBlank()) return@IconButton
                             isRecording = true
@@ -703,7 +703,7 @@ fun LiveViewScreen(
                         label = if (isSavingRecording) "Menyimpan..." else if (isRecording) "Berhenti" else "Rekam",
                         iconColor = if (isRecording) StatusDanger else PrimaryBlue,
                         onClick = {
-                            val activeUrl = streamUrl
+                            val activeUrl = fallbackStreamUrl?.takeIf { it.isNotBlank() } ?: streamUrl
                             if (!isRecording) {
                                 if (activeUrl.isNullOrBlank()) {
                                     Toast.makeText(context, "URL live stream belum siap untuk direkam", Toast.LENGTH_SHORT).show()

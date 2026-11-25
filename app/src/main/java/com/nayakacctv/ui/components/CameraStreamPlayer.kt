@@ -38,9 +38,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.util.concurrent.atomic.AtomicLong
 
-private const val MAX_AUTOMATIC_RETRIES = 3
-private const val FRAME_PROGRESS_CHECK_INTERVAL_MS = 1_000L
-private const val FRAME_STALL_TIMEOUT_MS = 10_000L
+private const val MAX_AUTOMATIC_RETRIES = 5
+private const val FRAME_PROGRESS_CHECK_INTERVAL_MS = 2_000L
+private const val FRAME_STALL_TIMEOUT_MS = 25_000L
 private const val STABLE_PLAYBACK_TO_RESET_RETRIES_MS = 30_000L
 private const val RETRY_BASE_DELAY_MS = 2_000L
 

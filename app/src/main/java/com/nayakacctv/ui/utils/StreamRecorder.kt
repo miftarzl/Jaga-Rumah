@@ -153,9 +153,9 @@ object StreamRecorder {
                         val segmentLines = lines.filter { !it.startsWith("#") }
 
                         // Pada poll pertama saat mulai rekam:
-                        // Tandai semua segmen historis lama di buffer playlist sebagai "sudah terunduh"
-                        // kecuali paling banyak 1 segmen live paling terakhir yang sedang berjalan
-                        // Hal ini mencegah rekaman membengkak durasinya dan mencegah freeze pada segmen lama
+                        // Jika ada segmen di playlist, ambil 1 segmen paling akhir agar rekaman langsung memiliki data
+                        // dan tidak kosong jika user menekan Stop setelah 3-5 detik.
+                        // Segmen sebelum segmen terakhir ditandai dilewati untuk menghindari rekaman melompat ke masa lalu.
                         if (isFirstPoll) {
                             isFirstPoll = false
                             if (segmentLines.size > 1) {
@@ -164,11 +164,11 @@ object StreamRecorder {
                                     val oldKey = oldSeg.substringBefore('?').substringAfterLast('/')
                                     downloadedSegments.add(oldKey)
                                 }
-                                Log.i(TAG, "Skipped ${oldHistorySegments.size} historical buffer segments from past")
+                                Log.i(TAG, "Skipped ${oldHistorySegments.size} older segments to preserve real-time start")
                             }
                         }
 
-                        // Unduh hanya segmen aktif saat rekaman berjalan
+                        // Unduh segmen aktif saat rekaman berjalan
                         for (line in segmentLines) {
                             val segKey = line.substringBefore('?').substringAfterLast('/')
                             if (!downloadedSegments.contains(segKey)) {
@@ -176,10 +176,12 @@ object StreamRecorder {
                                 val ok = downloadAndAppend(segUrl)
                                 if (ok) {
                                     downloadedSegments.add(segKey)
-                                    Log.i(TAG, "Downloaded fresh segment: $segKey")
+                                    Log.i(TAG, "Downloaded segment: $segKey")
                                 }
                             }
                         }
+                    } else {
+                        Log.w(TAG, "Playlist request HTTP error: ${resp.code}")
                     }
                 }
             } catch (e: Exception) {
