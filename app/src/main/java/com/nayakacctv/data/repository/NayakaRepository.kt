@@ -275,14 +275,31 @@ class NayakaRepository(
         }
 
     suspend fun updateCamera(id: String, name: String, location: String, streamUrl: String): Result<Camera> {
-        tokenManager.saveCameraOverride(id, name.trim(), location.trim(), streamUrl.trim())
+        val trimmedName = name.trim()
+        val trimmedLocation = location.trim()
+        val trimmedUrl = streamUrl.trim()
+        tokenManager.saveCameraOverride(id, trimmedName, trimmedLocation, trimmedUrl)
         clearCameraCaches()
+        try {
+            val body = mutableMapOf<String, String>()
+            if (trimmedName.isNotBlank()) body["name"] = trimmedName
+            if (trimmedLocation.isNotBlank()) body["location"] = trimmedLocation
+            if (trimmedUrl.isNotBlank()) body["stream_url"] = trimmedUrl
+            api.updateCameraInfo(id, body)
+        } catch (_: Exception) {
+            // Jika backend belum memiliki endpoint ini (HTTP 404/501), override lokal tetap aktif
+        }
         return getCameraDetail(id, forceRefresh = true)
     }
 
     suspend fun deleteCamera(id: String): Result<Boolean> {
         tokenManager.markCameraDeleted(id)
         clearCameraCaches()
+        try {
+            api.deleteCamera(id)
+        } catch (_: Exception) {
+            // Jika backend belum siap, penghapusan lokal tetap berjalan
+        }
         return Result.success(true)
     }
 

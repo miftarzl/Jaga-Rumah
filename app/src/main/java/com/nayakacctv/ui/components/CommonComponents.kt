@@ -11,8 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -220,6 +221,32 @@ fun CameraCard(
     modifier: Modifier = Modifier,
     onSettingsClick: (() -> Unit)? = null
 ) {
+    val isOnline = camera.status.equals("online", ignoreCase = true)
+    var snapshotTick by remember(camera.id) { mutableLongStateOf(System.currentTimeMillis()) }
+
+    // Auto-refresh snapshot setiap 6 detik jika kamera berstatus online agar tidak statis
+    LaunchedEffect(camera.id, isOnline) {
+        if (isOnline) {
+            while (true) {
+                delay(6000)
+                snapshotTick = System.currentTimeMillis()
+            }
+        }
+    }
+
+    val snapshotUrl = remember(camera.thumbnailUrl, camera.id, snapshotTick) {
+        val base = if (!camera.thumbnailUrl.isNullOrBlank()) {
+            NetworkClient.resolveUrl(camera.thumbnailUrl)
+        } else {
+            NetworkClient.resolveUrl("mobile/cameras/${camera.id}/snapshot")
+        }
+        if (isOnline) {
+            if (base.contains("?")) "$base&t=$snapshotTick" else "$base?t=$snapshotTick"
+        } else {
+            base
+        }
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -227,7 +254,7 @@ fun CameraCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column {
-            // Thumbnail preview (clickable)
+            // Thumbnail / Snapshot preview (clickable to open live stream)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -235,25 +262,59 @@ fun CameraCard(
                     .background(Color(0xFF1E293B))
                     .clickable(onClick = onClick)
             ) {
-                if (!camera.thumbnailUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = camera.thumbnailUrl,
-                        contentDescription = camera.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
+                AsyncImage(
+                    model = snapshotUrl,
+                    contentDescription = camera.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Tombol Play di tengah agar intuitif bisa langsung ditonton
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .align(Alignment.Center),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Videocam,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.4f),
-                        modifier = Modifier
-                            .size(54.dp)
-                            .align(Alignment.Center)
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Buka Siaran Langsung",
+                        tint = Color.White,
+                        modifier = Modifier.size(30.dp)
                     )
                 }
 
-                // Status Badge Overlay
+                // Tag Status Snapshot Aktif (Top-Start)
+                if (isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .padding(10.dp)
+                            .align(Alignment.TopStart)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF22C55E))
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "SNAPSHOT AKTIF",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // Status Badge Overlay (Top-End)
                 Box(
                     modifier = Modifier
                         .padding(10.dp)
@@ -262,17 +323,17 @@ fun CameraCard(
                     StatusBadge(camera.status)
                 }
 
-                // Type badge
+                // Resolusi (Bottom-Start)
                 Box(
                     modifier = Modifier
                         .padding(10.dp)
                         .align(Alignment.BottomStart)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.6f))
+                        .background(Color.Black.copy(alpha = 0.65f))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = camera.resolution,
+                        text = camera.resolution.ifBlank { "HD 1080P" },
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium

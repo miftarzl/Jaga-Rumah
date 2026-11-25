@@ -84,6 +84,7 @@ internal fun WebRtcCameraStreamPlayer(
                 init(eglBase.eglBaseContext, null)
                 setEnableHardwareScaler(true)
                 setMirror(false)
+                keepScreenOn = true
                 renderer = this
             }
         },

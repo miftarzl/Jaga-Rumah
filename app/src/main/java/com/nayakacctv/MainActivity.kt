@@ -36,7 +36,7 @@ class MainActivity : FragmentActivity() {
         // Saat aplikasi baru dibuka (cold start), jika pengguna sudah login,
         // kunci aplikasi agar pengguna diminta verifikasi biometrik / password terlebih dahulu (konsep m-banking)
         if (repository.isLoggedIn()) {
-            AppLockManager.lock()
+            AppLockManager.lockImmediately()
         }
 
         setContent {
@@ -70,12 +70,20 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        val app = application as? NayakaApp
+        if (app?.repository?.isLoggedIn() == true) {
+            AppLockManager.onAppForegrounded()
+        }
+    }
+
     override fun onStop() {
         super.onStop()
         val app = application as? NayakaApp
-        // Setiap kali pengguna keluar / meminimalkan aplikasi ke latar belakang, kunci sesi
+        // Saat diminimalkan ke background, hitung waktu toleransi (30 detik)
         if (app?.repository?.isLoggedIn() == true) {
-            AppLockManager.lock()
+            AppLockManager.onAppBackgrounded()
         }
     }
 }

@@ -113,10 +113,9 @@ fun PlaybackScreen(
                     onToSelected = { toMillis = it },
                     onSearch = {
                         val now = System.currentTimeMillis()
-                        if (fromMillis < now - 24 * 60 * 60 * 1000L || toMillis > now ||
-                            fromMillis >= toMillis
-                        ) {
-                            errorMessage = "Pilih rentang waktu yang valid dalam 24 jam terakhir."
+                        val maxHistory = now - 30L * 24 * 60 * 60 * 1000L
+                        if (fromMillis < maxHistory || fromMillis >= toMillis) {
+                            errorMessage = "Pilih rentang waktu yang valid dalam 30 hari terakhir."
                         } else {
                             loadRecordings(forceRefresh = true)
                         }
@@ -277,7 +276,7 @@ private fun PlaybackFilterCard(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Filter rekaman (maks. 24 jam)", fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text("Filter rekaman (hingga 30 hari)", fontWeight = FontWeight.Bold, color = TextPrimary)
             Box {
                 OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -320,7 +319,7 @@ private fun PlaybackFilterCard(
                 }
             }
             Text(
-                "Rekaman otomatis tersimpan maksimal 24 jam.",
+                "Rekaman tersimpan sesuai paket penyimpanan dan riwayat lokal perangkat.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextMuted
             )

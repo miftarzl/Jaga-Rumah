@@ -71,6 +71,17 @@ interface ApiService {
         @Path("id") id: String
     ): Response<ApiResponse<CameraStream>>
 
+    @PATCH("mobile/cameras/{id}")
+    suspend fun updateCameraInfo(
+        @Path("id") id: String,
+        @Body request: Map<String, String>
+    ): Response<ApiResponse<CameraDetailResponse>>
+
+    @DELETE("mobile/cameras/{id}")
+    suspend fun deleteCamera(
+        @Path("id") id: String
+    ): Response<ResponseBody>
+
     @POST("mobile/cameras/{id}/ptz")
     suspend fun controlCameraPtz(
         @Path("id") id: String,

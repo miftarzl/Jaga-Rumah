@@ -1,8 +1,13 @@
 package com.nayakacctv.ui.screens.cameras
 
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,6 +54,7 @@ import com.nayakacctv.ui.components.StatusBadge
 import com.nayakacctv.ui.theme.*
 import com.nayakacctv.ui.utils.CameraTalkRecorder
 import com.nayakacctv.ui.utils.StreamRecorder
+import com.nayakacctv.ui.utils.findFragmentActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -76,6 +82,41 @@ fun LiveViewScreen(
     var streamError by remember { mutableStateOf<String?>(null) }
     var allCameras by remember { mutableStateOf<List<Camera>>(emptyList()) }
     var showCameraSwitcher by remember { mutableStateOf(false) }
+
+    val activity = remember(context) { context.findFragmentActivity() }
+    var isFullscreen by remember { mutableStateOf(false) }
+    var showSirenDialog by remember { mutableStateOf(false) }
+    var isSirenTriggering by remember { mutableStateOf(false) }
+    var lastPtzDirection by remember { mutableStateOf<PtzDirection?>(null) }
+
+    BackHandler(enabled = isFullscreen) {
+        isFullscreen = false
+    }
+
+    LaunchedEffect(isFullscreen) {
+        val act = activity ?: return@LaunchedEffect
+        val window = act.window ?: return@LaunchedEffect
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        if (isFullscreen) {
+            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
+            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        } else {
+            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.let { act ->
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                act.window?.let { win ->
+                    WindowCompat.getInsetsController(win, win.decorView).show(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+        }
+    }
 
     val streamController = rememberCameraStreamController()
     var isMuted by remember { mutableStateOf(false) }
@@ -162,6 +203,9 @@ fun LiveViewScreen(
         speed: Float = 0.5f,
         durationMs: Int = 400
     ) {
+        if (direction != PtzDirection.STOP) {
+            lastPtzDirection = direction
+        }
         pendingPtzRequests++
         ptzError = null
         ptzStatus = null
@@ -170,7 +214,18 @@ fun LiveViewScreen(
             try {
                 ptzRequestMutex.withLock {
                     repository.controlCameraPtz(targetCameraId, direction, speed, durationMs)
-                        .onSuccess { ptzStatus = it.take(300) }
+                        .onSuccess {
+                            val dirName = when (direction) {
+                                PtzDirection.UP -> "Atas"
+                                PtzDirection.DOWN -> "Bawah"
+                                PtzDirection.LEFT -> "Kiri"
+                                PtzDirection.RIGHT -> "Kanan"
+                                PtzDirection.ZOOM_IN -> "Zoom In"
+                                PtzDirection.ZOOM_OUT -> "Zoom Out"
+                                else -> "Berhenti"
+                            }
+                            ptzStatus = "Kamera merespons perintah $dirName"
+                        }
                         .onFailure { ptzError = it.localizedMessage ?: "Gagal mengontrol kamera." }
                 }
             } finally {
@@ -252,6 +307,167 @@ fun LiveViewScreen(
         } else {
             recordElapsedSeconds = 0L
         }
+    }
+
+    if (isFullscreen) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            val currentStreamUrl = streamUrl
+            if (currentStreamUrl != null) {
+                CameraStreamPlayer(
+                    streamUrl = currentStreamUrl,
+                    forceHls = false,
+                    isMuted = isMuted,
+                    fallbackStreamUrl = fallbackStreamUrl,
+                    controller = streamController,
+                    modifier = Modifier.fillMaxSize(),
+                    onStateChange = { state ->
+                        streamStatus = when (state) {
+                            "playing" -> "LIVE HD"
+                            "webrtc_playing" -> "LIVE • LOW LATENCY"
+                            "connecting" -> "Menghubungkan..."
+                            "reconnecting" -> "Menyambungkan kembali..."
+                            else -> "Koneksi Terputus"
+                        }
+                    }
+                )
+            }
+
+            // Top Controls Overlay in Fullscreen
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { isFullscreen = false }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Keluar Fullscreen", tint = Color.White)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = camera?.name ?: "Siaran Langsung",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    if (isRecording) {
+                        Spacer(Modifier.width(12.dp))
+                        val m = recordElapsedSeconds / 60
+                        val s = recordElapsedSeconds % 60
+                        Text(
+                            text = String.format("REC %02d:%02d", m, s),
+                            color = Color.Red,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = streamStatus,
+                        color = if (streamStatus == "LIVE HD" || streamStatus.contains("LIVE")) Color(0xFF22C55E) else Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = {
+                        isMuted = !isMuted
+                        Toast.makeText(context, if (isMuted) "Audio dimatikan" else "Audio diaktifkan", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Icon(
+                            imageVector = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                            contentDescription = "Mute/Unmute",
+                            tint = Color.White
+                        )
+                    }
+                    IconButton(onClick = { isFullscreen = false }) {
+                        Icon(Icons.Default.FullscreenExit, contentDescription = "Keluar Fullscreen", tint = Color.White)
+                    }
+                }
+            }
+
+            // Floating Action Buttons on Bottom Right
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        streamController.captureFrame { bitmap ->
+                            if (bitmap != null) {
+                                val res = StreamRecorder.saveSnapshotToGallery(context, bitmap)
+                                if (res.isSuccess) {
+                                    Toast.makeText(context, "Foto snapshot disimpan ke Galeri!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Gagal menyimpan foto.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Foto", tint = Color.White, modifier = Modifier.size(22.dp))
+                }
+
+                IconButton(
+                    onClick = {
+                        val activeUrl = streamUrl
+                        if (!isRecording) {
+                            if (activeUrl.isNullOrBlank()) return@IconButton
+                            isRecording = true
+                            recordElapsedSeconds = 0L
+                            StreamRecorder.startRecording(
+                                context = context,
+                                streamUrl = activeUrl,
+                                cameraId = activeCameraId,
+                                cameraName = camera?.name ?: "Kamera CCTV",
+                                scope = coroutineScope
+                            )
+                            Toast.makeText(context, "Mulai merekam siaran CCTV...", Toast.LENGTH_SHORT).show()
+                        } else {
+                            if (isSavingRecording) return@IconButton
+                            isSavingRecording = true
+                            isRecording = false
+                            streamController.captureFrame { lastFrame ->
+                                coroutineScope.launch {
+                                    val result = StreamRecorder.stopRecording(context, lastFrame)
+                                    isSavingRecording = false
+                                    result.onSuccess { rec ->
+                                        repository.saveLocalRecording(rec)
+                                        Toast.makeText(context, "Rekaman video berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(if (isRecording) Color.Red else Color.Black.copy(alpha = 0.65f))
+                ) {
+                    Icon(
+                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                        contentDescription = "Rekam",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+        return
     }
 
     Scaffold(
@@ -371,6 +587,24 @@ fun LiveViewScreen(
                         color = if (streamStatus == "LIVE HD") Color(0xFF22C55E) else Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Tombol Fullscreen (Bottom-Right)
+                IconButton(
+                    onClick = { isFullscreen = true },
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .align(Alignment.BottomEnd)
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Fullscreen,
+                        contentDescription = "Mode Layar Penuh",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -497,7 +731,7 @@ fun LiveViewScreen(
                         label = "Bunyikan Sirine",
                         iconColor = StatusDanger,
                         onClick = {
-                            Toast.makeText(context, "Sirine peringatan darurat kamera dibunyikan!", Toast.LENGTH_SHORT).show()
+                            showSirenDialog = true
                         }
                     )
                 }
@@ -595,6 +829,52 @@ fun LiveViewScreen(
             }
         )
     }
+
+    // ── Dialog Konfirmasi Bunyikan Sirine ───────────────────────────────────
+    if (showSirenDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isSirenTriggering) showSirenDialog = false },
+            title = {
+                Text("Picu Sirine Alarm Kamera?", fontWeight = FontWeight.Bold, color = StatusDanger)
+            },
+            text = {
+                Text("Perintah alarm darurat (SOS) akan dikirim ke sistem untuk membunyikan sirine kamera \"${camera?.name ?: "CCTV"}\" dan memberi peringatan sekitar.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isSirenTriggering = true
+                        coroutineScope.launch {
+                            val res = repository.triggerSos()
+                            isSirenTriggering = false
+                            showSirenDialog = false
+                            res.onSuccess {
+                                Toast.makeText(context, "Sirine alarm kamera berhasil dipicu!", Toast.LENGTH_LONG).show()
+                            }.onFailure {
+                                Toast.makeText(context, "Gagal memicu sirine: ${it.localizedMessage ?: "periksa koneksi"}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StatusDanger),
+                    enabled = !isSirenTriggering
+                ) {
+                    if (isSirenTriggering) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text("Bunyikan Sekarang", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showSirenDialog = false },
+                    enabled = !isSirenTriggering
+                ) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -682,21 +962,57 @@ private fun PtzControlPanel(
                     Text("Zoom +")
                 }
             }
-            if (errorMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = errorMessage,
-                    color = StatusDanger,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            if (statusMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Respons API (belum memastikan kamera bergerak): $statusMessage",
-                    color = TextSecondary,
-                    style = MaterialTheme.typography.bodySmall
-                )
+            if (isLoading) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = PrimaryBlue)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Mengirim perintah gerakan ke kamera...",
+                        color = PrimaryBlue,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            } else if (errorMessage != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFFEE2E2))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = StatusDanger, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = errorMessage,
+                            color = StatusDanger,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            } else if (statusMessage != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFDCFCE7))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusOnline, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = statusMessage,
+                            color = Color(0xFF15803D),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
             }
         }
     }

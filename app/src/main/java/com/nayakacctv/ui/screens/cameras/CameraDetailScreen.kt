@@ -61,7 +61,7 @@ fun CameraDetailScreen(
                 camera = it
                 editName = it.name
                 editLocation = it.location
-                editStreamUrl = it.streamUrl.ifBlank { "http://110.232.92.134:3001/api/stream" }
+                editStreamUrl = it.streamUrl
             }
         }
     }
@@ -81,7 +81,7 @@ fun CameraDetailScreen(
                         IconButton(onClick = {
                             editName = camera?.name ?: ""
                             editLocation = camera?.location ?: ""
-                            editStreamUrl = camera?.streamUrl?.ifBlank { "http://110.232.92.134:3001/api/stream" } ?: ""
+                            editStreamUrl = camera?.streamUrl ?: ""
                             showEditDialog = true
                         }) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit Kamera", tint = PrimaryBlue)
@@ -164,7 +164,7 @@ fun CameraDetailScreen(
                         onClick = {
                             editName = cam.name
                             editLocation = cam.location
-                            editStreamUrl = cam.streamUrl.ifBlank { "http://110.232.92.134:3001/api/stream" }
+                            editStreamUrl = cam.streamUrl
                             showEditDialog = true
                         },
                         modifier = Modifier.weight(1f),
@@ -207,7 +207,7 @@ fun CameraDetailScreen(
                         SpecRow("Resolusi", cam.resolution)
                         SpecRow("Sudut Pandang (FOV)", "${cam.fov}°")
                         SpecRow("Baterai", if (cam.battery != null) "${cam.battery}%" else "Daya Langsung (AC)")
-                        SpecRow("Alamat Stream", if (cam.streamUrl.isNotBlank()) cam.streamUrl else "http://110.232.92.134:3001/api/stream")
+                        SpecRow("Alamat Stream", if (cam.streamUrl.isNotBlank()) cam.streamUrl else "Otomatis diatur backend")
                     }
                 }
 
@@ -308,8 +308,8 @@ fun CameraDetailScreen(
                     OutlinedTextField(
                         value = editStreamUrl,
                         onValueChange = { editStreamUrl = it },
-                        label = { Text("URL Sumber Stream CCTV") },
-                        placeholder = { Text("http://110.232.92.134:3001/api/stream") },
+                        label = { Text("URL Sumber Stream CCTV (Opsional)") },
+                        placeholder = { Text("Contoh: rtsp://... atau biarkan kosong") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
