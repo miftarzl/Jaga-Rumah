@@ -88,6 +88,12 @@ interface ApiService {
         @Body request: PtzControlRequest
     ): Response<ResponseBody>
 
+    @POST("mobile/cameras/{id}/siren")
+    suspend fun triggerCameraSiren(
+        @Path("id") id: String,
+        @Body request: CameraSirenRequest
+    ): Response<ResponseBody>
+
     @Multipart
     @POST("mobile/cameras/{id}/talk")
     suspend fun sendCameraTalk(

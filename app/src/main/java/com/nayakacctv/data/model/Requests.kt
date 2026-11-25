@@ -68,6 +68,10 @@ data class PtzControlRequest(
     @SerializedName("duration_ms") val durationMs: Int = 400
 )
 
+data class CameraSirenRequest(
+    @SerializedName("duration_seconds") val durationSeconds: Int = 8
+)
+
 const val MAX_CAMERA_TALK_AUDIO_BYTES = 5L * 1024L * 1024L
 
 data class TriggerSosRequest(

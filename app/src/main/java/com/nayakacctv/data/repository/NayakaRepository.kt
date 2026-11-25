@@ -533,6 +533,46 @@ class NayakaRepository(
     suspend fun getAlertDetail(id: String): Result<AlertItem> =
         safeApiCall { api.getAlertDetail(id) }.mapCatching { it.alert ?: throw Exception("Notifikasi tidak ditemukan") }
 
+    suspend fun triggerCameraSiren(
+        cameraId: String,
+        durationSeconds: Int = 8
+    ): Result<String> = withContext(Dispatchers.IO) {
+        if (durationSeconds !in 3..20) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Durasi sirine harus antara 3 dan 20 detik.")
+            )
+        }
+
+        try {
+            val response = api.triggerCameraSiren(
+                cameraId,
+                CameraSirenRequest(durationSeconds)
+            )
+            if (response.isSuccessful) {
+                response.body()?.close()
+                Result.success("Sirine kamera berhasil dipicu selama $durationSeconds detik.")
+            } else {
+                val responseText = response.errorBody()?.use { it.string() }.orEmpty()
+                val apiMessage = try {
+                    gson.fromJson(responseText, ApiErrorResponse::class.java)?.error?.message
+                } catch (_: Exception) {
+                    null
+                }
+                Result.failure(
+                    Exception(
+                        apiMessage?.takeIf { it.isNotBlank() }
+                            ?: responseText.takeIf { it.isNotBlank() }?.take(500)
+                            ?: "Gagal memicu sirine kamera (HTTP ${response.code()})."
+                    )
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(Exception(e.localizedMessage ?: "Gagal mengirim perintah sirine ke kamera."))
+        }
+    }
+
     suspend fun downloadAlertSnapshot(id: String, destination: File): Result<File> =
         downloadAlertEvidence(destination, "snapshot", "image/") {
             api.getAlertSnapshot(id)

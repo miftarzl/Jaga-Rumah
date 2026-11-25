@@ -859,14 +859,14 @@ fun LiveViewScreen(
                 Text("Picu Sirine Alarm Kamera?", fontWeight = FontWeight.Bold, color = StatusDanger)
             },
             text = {
-                Text("Perintah alarm darurat (SOS) akan dikirim ke sistem untuk membunyikan sirine kamera \"${camera?.name ?: "CCTV"}\" dan memberi peringatan sekitar.")
+                Text("Sirine kamera \"${camera?.name ?: "CCTV"}\" akan berbunyi selama 8 detik.")
             },
             confirmButton = {
                 Button(
                     onClick = {
                         isSirenTriggering = true
                         coroutineScope.launch {
-                            val res = repository.triggerSos()
+                            val res = repository.triggerCameraSiren(activeCameraId)
                             isSirenTriggering = false
                             showSirenDialog = false
                             res.onSuccess {
