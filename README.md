@@ -24,8 +24,11 @@
 
 **JAGA RUMAH** adalah aplikasi mobile klien native yang dibangun menggunakan Kotlin dan Jetpack Compose. Aplikasi berawal dari fitur pemantauan CCTV dan dikembangkan menuju satu tempat untuk memantau keamanan serta mengendalikan perangkat rumah:
 - **UI Murni Deklaratif**: Dibangun 100% menggunakan **Jetpack Compose** dan **Material 3**.
-- **Live CCTV Streamer**: Meminta URL playback bertoken dari backend dan memutar HLS/RTSP dengan Media3; MJPEG tetap didukung untuk endpoint legacy.
-- **Keamanan Perangkat Keras**: Menggunakan `BiometricPrompt` & `EncryptedSharedPreferences` yang terenkripsi langsung via Android Keystore.
+- **Live CCTV Streamer**: Meminta URL playback bertoken dari backend dan memutar WebRTC (WHEP), HLS (fMP4 low latency) & RTSP dengan Media3; polling snapshot dinamis otomatis untuk dashboard, serta MJPEG tetap didukung untuk endpoint legacy.
+- **Perekaman Video & Snapshot Lokal**: Perekaman siaran langsung CCTV langsung tersimpan ke penyimpanan publik galeri (`Movies/NayakaCCTV`) dalam format MP4/fMP4 tanpa freeze timestamp, lengkap dengan thumbnail otomatis dan manajemen hapus rekaman.
+- **Kontrol Kamera (PTZ & Sirine)**: Kontrol arah (Atas, Bawah, Kiri, Kanan, Zoom In/Out) dengan feedback status responsif, pembunyian sirine darurat langsung dari live view, serta audio dua arah (Push-to-Talk).
+- **Keamanan Sesi & Toleransi Kunci (Grace Period)**: Menggunakan `BiometricPrompt` & `EncryptedSharedPreferences` dengan toleransi 30 detik (grace period) saat berpindah aplikasi sebelum layar kunci aktif kembali.
+- **Mode Layar Penuh (Fullscreen Landscape)**: Rotasi dinamis ke landscape dengan menyembunyikan system bar untuk pemantauan CCTV dan video playback yang imersif.
 - **Auto-Refresh Token Interceptor**: Mutex berbasis `OkHttp Authenticator` yang memperbarui JWT access token secara mulus tanpa membuat pengguna logout paksa.
 
 ---
@@ -43,8 +46,8 @@
 | **Networking** | Retrofit 2 + OkHttp 3 | `2.11.0` / `4.12.0` | Client REST API dengan HttpLoggingInterceptor |
 | **Serialization** | Gson | `2.11.0` | Parser JSON envelope `{ data, meta }` |
 | **Keamanan** | Security Crypto & Biometric | `1.1.0-alpha06` / `1.2.0` | AES-256 GCM EncryptedSharedPreferences & Sidik Jari/Wajah |
-| **Image Loading** | Coil Compose | `2.7.0` | Pemuat thumbnail kamera asynchronous |
-| **Video Stream** | AndroidX Media3 | `1.5.1` | Pemutar native HLS dan RTSP; endpoint MJPEG legacy tetap didukung |
+| **Image Loading** | Coil Compose | `2.7.0` | Pemuat thumbnail kamera & live snapshot polling |
+| **Video Stream** | AndroidX Media3 & WebRTC | `1.5.1` / `1.0.32006` | Pemutar native WebRTC (WHEP), HLS (Low-latency fMP4), RTSP, dan fallback MJPEG |
 
 ---
 
@@ -234,20 +237,25 @@ Berkas APK yang dihasilkan akan berada di:
    - Otentikasi Biometrik instan (*Fingerprint / Face ID*)
    - Pemulihan sandi via kode OTP
    - Sesi aman dengan token auto-refresh di latar belakang
-2. **Dashboard Cerdas**:
-   - Ringkasan total kamera, online, sedang merekam, dan offline
-   - Akses darurat cepat & notifikasi terkini
+2. **Dashboard Cerdas & Snapshot Dinamis**:
+   - Ringkasan total kamera, status online, merekam, dan offline.
+   - **Snapshot Terkini Dinamis**: Polling otomatis snapshot terbaru tiap 6 detik dengan indikator live aktif tanpa membebani bandwidth video kontinu.
+   - Akses darurat cepat & notifikasi ancaman kendaraan/orang terkini.
 3. **Kamera & Siaran Langsung (Live View)**:
-   - Pencarian kamera dan filter status
-   - Pemutar live streaming MJPEG latensi rendah
-   - Kontrol PTZ dengan tombol arah dan joystick
-   - Push-to-talk ke speaker kamera melalui endpoint backend
-   - Snapshot foto seketika ke memori perangkat
-   - Perekaman video lokal dengan indikator REC
-4. **Histori Rekaman & Timeline Player**:
-   - Filter histori rekaman per kamera
-   - Scrubbing timeline video slider
-   - Pengatur kecepatan putar (0.5x, 1x, 2x, 4x)
+   - Pencarian kamera dan filter status.
+   - Pemutar live streaming multi-protokol (WebRTC WHEP, HLS fMP4 berlatensi rendah, RTSP, MJPEG).
+   - **Mode Layar Penuh (Landscape)**: Tampilan layar penuh dengan rotasi otomatis sensor dan penyembunyian bilah navigasi sistem.
+   - **Kontrol PTZ**: Pengaturan arah kamera (Atas, Bawah, Kiri, Kanan, Zoom In/Out) dengan lencana status respons server.
+   - **Bunyikan Sirine**: Tombol picu sirine alarm darurat terintegrasi langsung dari layar live view dengan dialog konfirmasi.
+   - **Push-to-Talk**: Komunikasi audio dua arah ke speaker kamera.
+   - **Snapshot Frame Instan**: Pengambilan gambar frame video real-time dan tersimpan langsung ke galeri foto (`Pictures/NayakaCCTV`).
+   - **Perekaman Video CCTV**: Perekaman fMP4 instan langsung ke penyimpanan publik (`Movies/NayakaCCTV`) dengan normalisasi timestamp (tanpa freeze frame awal) dan indikator durasi REC.
+4. **Histori Rekaman & Timeline Player (Playback)**:
+   - Filter histori rekaman per kamera hingga 30 hari.
+   - Scrubbing timeline slider dan kontrol kecepatan (0.5x, 1x, 2x, 4x).
+   - Mode layar penuh untuk pemutaran rekaman.
+   - Dukungan unduh rekaman lokal dan server.
+   - **Hapus Rekaman**: Fitur hapus berkas rekaman langsung dari aplikasi beserta sinkronisasi cache.
 5. **Peringatan Bahaya (Alerts)**:
    - Filter level ancaman (*Kritis, Belum Dibaca*)
    - Tandai semua notifikasi sudah dibaca
