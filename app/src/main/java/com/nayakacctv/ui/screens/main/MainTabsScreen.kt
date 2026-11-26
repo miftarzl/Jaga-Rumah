@@ -34,6 +34,7 @@ fun MainTabsScreen(
     onNavigateToAlertDetail: (String) -> Unit,
     onNavigateToEmergency: () -> Unit,
     onNavigateToSubscription: () -> Unit,
+    onNavigateToResetPassword: (String) -> Unit = {},
     onNavigateToHelp: () -> Unit,
     onNavigateToTerms: () -> Unit,
     onLogout: () -> Unit,
@@ -136,6 +137,7 @@ fun MainTabsScreen(
                 BottomTab.Profile.route -> ProfileScreen(
                     repository = repository,
                     onNavigateToSubscription = onNavigateToSubscription,
+                    onNavigateToResetPassword = onNavigateToResetPassword,
                     onNavigateToHelp = onNavigateToHelp,
                     onNavigateToTerms = onNavigateToTerms,
                     onLogout = onLogout

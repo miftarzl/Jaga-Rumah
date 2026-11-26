@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 fun ProfileScreen(
     repository: NayakaRepository,
     onNavigateToSubscription: () -> Unit,
+    onNavigateToResetPassword: (String) -> Unit = {},
     onNavigateToHelp: () -> Unit,
     onNavigateToTerms: () -> Unit,
     onLogout: () -> Unit
@@ -41,6 +42,8 @@ fun ProfileScreen(
     val customer = repository.getCurrentCustomer()
     var isBiometricEnabled by remember { mutableStateOf(repository.isBiometricEnabled()) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showResetPasswordDialog by remember { mutableStateOf(false) }
+    var isSendingOtp by remember { mutableStateOf(false) }
 
     if (showLogoutDialog) {
         AlertDialog(
@@ -63,6 +66,61 @@ fun ProfileScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    if (showResetPasswordDialog) {
+        val userEmail = customer?.email?.trim().orEmpty()
+        AlertDialog(
+            onDismissRequest = { if (!isSendingOtp) showResetPasswordDialog = false },
+            title = { Text("Reset Kata Sandi", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Kode verifikasi OTP akan dikirimkan ke email:\n$userEmail\n\nLanjutkan untuk menerima kode?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (userEmail.isBlank()) {
+                            showResetPasswordDialog = false
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Email pengguna tidak ditemukan.")
+                            }
+                            return@Button
+                        }
+                        isSendingOtp = true
+                        coroutineScope.launch {
+                            val res = repository.forgotPassword(userEmail)
+                            isSendingOtp = false
+                            showResetPasswordDialog = false
+                            res.onSuccess {
+                                onNavigateToResetPassword(userEmail)
+                            }.onFailure { err ->
+                                snackbarHostState.showSnackbar(err.message ?: "Gagal mengirim kode OTP ke email.")
+                            }
+                        }
+                    },
+                    enabled = !isSendingOtp,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                ) {
+                    if (isSendingOtp) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (isSendingOtp) "Mengirim OTP..." else "Kirim Kode OTP", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showResetPasswordDialog = false },
+                    enabled = !isSendingOtp
+                ) {
                     Text("Batal")
                 }
             }
@@ -232,6 +290,38 @@ fun ProfileScreen(
                                 }
                             },
                             colors = SwitchDefaults.colors(checkedThumbColor = PrimaryBlue)
+                        )
+                    }
+
+                    Divider(color = BorderSubtle, modifier = Modifier.padding(vertical = 12.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showResetPasswordDialog = true }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.LockReset, contentDescription = null, tint = PrimaryBlue)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Reset / Ganti Kata Sandi", color = TextPrimary, fontWeight = FontWeight.Medium)
+                                Text(
+                                    "Kirim kode OTP ke email untuk membuat sandi baru",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = TextMuted
                         )
                     }
                 }

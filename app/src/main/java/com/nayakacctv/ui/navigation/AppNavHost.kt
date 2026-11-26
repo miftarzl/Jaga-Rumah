@@ -151,6 +151,9 @@ fun AppNavHost(
                     onNavigateToSubscription = {
                         navController.navigate(Screen.Subscription.route)
                     },
+                    onNavigateToResetPassword = { email ->
+                        navController.navigate(Screen.ResetPassword.createRoute(email))
+                    },
                     onNavigateToHelp = {
                         navController.navigate(Screen.Help.route)
                     },
