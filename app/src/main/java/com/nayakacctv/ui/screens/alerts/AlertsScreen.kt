@@ -31,7 +31,7 @@ fun AlertsScreen(
     var selectedFilter by remember { mutableStateOf("Semua") }
     var isLoading by remember { mutableStateOf(true) }
 
-    val filters = listOf("Semua", "Kendaraan", "Kritis", "Belum Dibaca")
+    val filters = listOf("Semua", "Peringatan", "Kritis", "Kendaraan", "Belum Dibaca")
 
     val loadAlerts = {
         coroutineScope.launch {
@@ -49,8 +49,9 @@ fun AlertsScreen(
     val filteredAlerts = remember(alerts, selectedFilter) {
         alerts.filter { item ->
             when (selectedFilter) {
+                "Peringatan" -> item.severity.equals("warning", ignoreCase = true) || item.severity.equals("peringatan", ignoreCase = true)
+                "Kritis" -> item.severity.equals("critical", ignoreCase = true) || item.severity.equals("kritis", ignoreCase = true)
                 "Kendaraan" -> item.type.equals("vehicle", ignoreCase = true)
-                "Kritis" -> item.severity.equals("critical", ignoreCase = true)
                 "Belum Dibaca" -> !item.read
                 else -> true
             }

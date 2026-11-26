@@ -1,5 +1,6 @@
 package com.nayakacctv.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -436,9 +437,10 @@ fun AlertItemCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (alert.read) SurfaceWhite else Color(0xFFF0FDF4)
+            containerColor = if (alert.read) SurfaceWhite else Color(0xFFEFF6FF)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        border = if (!alert.read) BorderStroke(1.5.dp, Color(0xFF93C5FD)) else BorderStroke(1.dp, BorderSubtle),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (alert.read) 1.dp else 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -499,12 +501,27 @@ fun AlertItemCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = alert.cameraName.ifBlank { "Kamera CCTV" },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        if (!alert.read) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(PrimaryBlue)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = alert.cameraName.ifBlank { "Kamera CCTV" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = if (!alert.read) FontWeight.Bold else FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     SeverityBadge(alert.severity)
                 }
 
@@ -512,13 +529,14 @@ fun AlertItemCard(
                 Text(
                     text = alert.message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
+                    fontWeight = if (!alert.read) FontWeight.Medium else FontWeight.Normal,
+                    color = if (!alert.read) TextPrimary else TextSecondary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = Formatters.formatIsoDate(alert.time),
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextMuted
+                    color = if (!alert.read) PrimaryBlue else TextMuted
                 )
             }
         }
